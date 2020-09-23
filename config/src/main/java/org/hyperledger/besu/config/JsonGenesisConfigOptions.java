@@ -17,6 +17,8 @@ package org.hyperledger.besu.config;
 import static java.util.Collections.emptyMap;
 import static java.util.Objects.isNull;
 
+import org.hyperledger.besu.config.experimental.ExperimentalEIPs;
+
 import java.math.BigInteger;
 import java.util.Collections;
 import java.util.Map;
@@ -187,7 +189,16 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
 
   @Override
   public OptionalLong getConstantinopleFixBlockNumber() {
-    return getOptionalLong("constantinoplefixblock");
+    final OptionalLong petersburgBlock = getOptionalLong("petersburgblock");
+    final OptionalLong constantinopleFixBlock = getOptionalLong("constantinoplefixblock");
+    if (constantinopleFixBlock.isPresent()) {
+      if (petersburgBlock.isPresent()) {
+        throw new RuntimeException(
+            "Genesis files cannot specify both petersburgBlock and constantinopleFixBlock.");
+      }
+      return constantinopleFixBlock;
+    }
+    return petersburgBlock;
   }
 
   @Override
@@ -201,9 +212,26 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
   }
 
   @Override
+  public OptionalLong getBerlinBlockNumber() {
+    if (ExperimentalEIPs.berlinEnabled) {
+      final OptionalLong berlinBlock = getOptionalLong("berlinblock");
+      final OptionalLong yolov1Block = getOptionalLong("yolov1block");
+      if (yolov1Block.isPresent()) {
+        if (berlinBlock.isPresent()) {
+          throw new RuntimeException(
+              "Genesis files cannot specify both berlinblock and yoloV1Block.");
+        }
+        return yolov1Block;
+      }
+      return berlinBlock;
+    }
+    return OptionalLong.empty();
+  }
+
+  @Override
   // TODO EIP-1559 change for the actual fork name when known
   public OptionalLong getEIP1559BlockNumber() {
-    return getOptionalLong("eip1559block");
+    return ExperimentalEIPs.eip1559Enabled ? getOptionalLong("eip1559block") : OptionalLong.empty();
   }
 
   @Override
@@ -262,6 +290,11 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
   }
 
   @Override
+  public OptionalLong getEcip1017EraRounds() {
+    return getOptionalLong("ecip1017erarounds");
+  }
+
+  @Override
   public Map<String, Object> asMap() {
     final ImmutableMap.Builder<String, Object> builder = ImmutableMap.builder();
     getChainId().ifPresent(chainId -> builder.put("chainId", chainId));
@@ -287,11 +320,15 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
             });
     getByzantiumBlockNumber().ifPresent(l -> builder.put("byzantiumBlock", l));
     getConstantinopleBlockNumber().ifPresent(l -> builder.put("constantinopleBlock", l));
-    getConstantinopleFixBlockNumber().ifPresent(l -> builder.put("constantinopleFixBlock", l));
+    getConstantinopleFixBlockNumber().ifPresent(l -> builder.put("petersburgBlock", l));
     getIstanbulBlockNumber().ifPresent(l -> builder.put("istanbulBlock", l));
     getMuirGlacierBlockNumber().ifPresent(l -> builder.put("muirGlacierBlock", l));
+    getBerlinBlockNumber().ifPresent(l -> builder.put("berlinBlock", l));
+    getEIP1559BlockNumber().ifPresent(l -> builder.put("eip1559Block", l));
     getContractSizeLimit().ifPresent(l -> builder.put("contractSizeLimit", l));
     getEvmStackSize().ifPresent(l -> builder.put("evmstacksize", l));
+    getEcip1017EraRounds().ifPresent(l -> builder.put("ecip1017EraRounds", l));
+
     if (isClique()) {
       builder.put("clique", getCliqueConfigOptions().asMap());
     }

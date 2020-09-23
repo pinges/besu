@@ -42,7 +42,13 @@ public class ExpectValidPrivateTransactionReceipt implements PrivateCondition {
         node.execute(transactions.getPrivateTransactionReceipt(transactionHash));
     assertThat(actualReceipt)
         .usingRecursiveComparison()
-        .ignoringFields("commitmentHash", "logs")
+        .ignoringFields(
+            "commitmentHash",
+            "logs",
+            "blockHash",
+            "blockNumber",
+            "logsBloom",
+            "transactionIndex")
         .isEqualTo(expectedReceipt);
 
     assertThat(actualReceipt.getLogs().size()).isEqualTo(expectedReceipt.getLogs().size());

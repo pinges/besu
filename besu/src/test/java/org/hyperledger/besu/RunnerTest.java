@@ -25,9 +25,9 @@ import org.hyperledger.besu.config.JsonUtil;
 import org.hyperledger.besu.controller.BesuController;
 import org.hyperledger.besu.controller.GasLimitCalculator;
 import org.hyperledger.besu.controller.MainnetBesuControllerBuilder;
-import org.hyperledger.besu.crypto.BouncyCastleNodeKey;
 import org.hyperledger.besu.crypto.KeyPairUtil;
 import org.hyperledger.besu.crypto.NodeKey;
+import org.hyperledger.besu.crypto.NodeKeyUtils;
 import org.hyperledger.besu.ethereum.ProtocolContext;
 import org.hyperledger.besu.ethereum.api.graphql.GraphQLConfiguration;
 import org.hyperledger.besu.ethereum.api.jsonrpc.JsonRpcConfiguration;
@@ -145,14 +145,14 @@ public final class RunnerTest {
     final Path dataDirAhead = temp.newFolder().toPath();
     final Path dbAhead = dataDirAhead.resolve("database");
     final int blockCount = 500;
-    final NodeKey aheadDbNodeKey = new BouncyCastleNodeKey(KeyPairUtil.loadKeyPair(dbAhead));
+    final NodeKey aheadDbNodeKey = NodeKeyUtils.createFrom(KeyPairUtil.loadKeyPair(dbAhead));
     final SynchronizerConfiguration syncConfigAhead =
         SynchronizerConfiguration.builder().syncMode(SyncMode.FULL).build();
     final ObservableMetricsSystem noOpMetricsSystem = new NoOpMetricsSystem();
     final BigInteger networkId = BigInteger.valueOf(2929);
 
     // Setup state with block data
-    try (final BesuController<Void> controller =
+    try (final BesuController controller =
         new MainnetBesuControllerBuilder()
             .genesisConfigFile(genesisConfig)
             .synchronizerConfiguration(syncConfigAhead)
@@ -172,7 +172,7 @@ public final class RunnerTest {
     }
 
     // Setup Runner with blocks
-    final BesuController<Void> controllerAhead =
+    final BesuController controllerAhead =
         new MainnetBesuControllerBuilder()
             .genesisConfigFile(genesisConfig)
             .synchronizerConfiguration(syncConfigAhead)
@@ -193,6 +193,7 @@ public final class RunnerTest {
     final GraphQLConfiguration aheadGraphQLConfiguration = graphQLConfiguration();
     final WebSocketConfiguration aheadWebSocketConfiguration = wsRpcConfiguration();
     final MetricsConfiguration aheadMetricsConfiguration = metricsConfiguration();
+    final Path pidPath = temp.getRoot().toPath().resolve("pid");
     final RunnerBuilder runnerBuilder =
         new RunnerBuilder()
             .vertx(vertx)
@@ -213,11 +214,13 @@ public final class RunnerTest {
             .webSocketConfiguration(aheadWebSocketConfiguration)
             .metricsConfiguration(aheadMetricsConfiguration)
             .dataDir(dbAhead)
+            .pidPath(pidPath)
             .besuPluginContext(new BesuPluginContextImpl())
             .build();
     try {
 
       runnerAhead.start();
+      assertThat(pidPath.toFile().exists()).isTrue();
 
       final SynchronizerConfiguration syncConfigBehind =
           SynchronizerConfiguration.builder()
@@ -232,7 +235,7 @@ public final class RunnerTest {
       final MetricsConfiguration behindMetricsConfiguration = metricsConfiguration();
 
       // Setup runner with no block data
-      final BesuController<Void> controllerBehind =
+      final BesuController controllerBehind =
           new MainnetBesuControllerBuilder()
               .genesisConfigFile(genesisConfig)
               .synchronizerConfiguration(syncConfigBehind)
@@ -240,7 +243,7 @@ public final class RunnerTest {
               .dataDirectory(dataDirBehind)
               .networkId(networkId)
               .miningParameters(new MiningParametersTestBuilder().enabled(false).build())
-              .nodeKey(BouncyCastleNodeKey.generate())
+              .nodeKey(NodeKeyUtils.generate())
               .storageProvider(new InMemoryStorageProvider())
               .metricsSystem(noOpMetricsSystem)
               .privacyParameters(PrivacyParameters.DEFAULT)
@@ -396,7 +399,7 @@ public final class RunnerTest {
     final JsonRpcConfiguration configuration = JsonRpcConfiguration.createDefault();
     configuration.setPort(0);
     configuration.setEnabled(true);
-    configuration.setHostsWhitelist(Collections.singletonList("*"));
+    configuration.setHostsAllowlist(Collections.singletonList("*"));
     return configuration;
   }
 
@@ -411,7 +414,7 @@ public final class RunnerTest {
     final WebSocketConfiguration configuration = WebSocketConfiguration.createDefault();
     configuration.setPort(0);
     configuration.setEnabled(true);
-    configuration.setHostsWhitelist(Collections.singletonList("*"));
+    configuration.setHostsAllowlist(Collections.singletonList("*"));
     return configuration;
   }
 
@@ -421,15 +424,15 @@ public final class RunnerTest {
 
   private static void setupState(
       final int count,
-      final ProtocolSchedule<Void> protocolSchedule,
-      final ProtocolContext<Void> protocolContext) {
+      final ProtocolSchedule protocolSchedule,
+      final ProtocolContext protocolContext) {
     final List<Block> blocks = BlockSyncTestUtils.firstBlocks(count + 1);
 
     for (int i = 1; i < count + 1; ++i) {
       final Block block = blocks.get(i);
-      final ProtocolSpec<Void> protocolSpec =
+      final ProtocolSpec protocolSpec =
           protocolSchedule.getByBlockNumber(block.getHeader().getNumber());
-      final BlockImporter<Void> blockImporter = protocolSpec.getBlockImporter();
+      final BlockImporter blockImporter = protocolSpec.getBlockImporter();
       final boolean result =
           blockImporter.importBlock(protocolContext, block, HeaderValidationMode.FULL);
       if (!result) {

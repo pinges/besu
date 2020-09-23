@@ -90,16 +90,15 @@ public class EeaSendRawTransaction implements JsonRpcMethod {
       final Optional<Bytes> maybePrivacyGroupId = privateTransaction.getPrivacyGroupId();
       if (onchainPrivacyGroupsEnabled) {
         if (!maybePrivacyGroupId.isPresent()) {
-          return new JsonRpcErrorResponse(id, JsonRpcError.PRIVACY_GROUP_ID_NOT_AVAILABLE);
+          return new JsonRpcErrorResponse(id, JsonRpcError.ONCHAIN_PRIVACY_GROUP_ID_NOT_AVAILABLE);
         }
         maybePrivacyGroup =
-            privacyController.retrieveOnChainPrivacyGroup(
-                maybePrivacyGroupId.get(), enclavePublicKey);
-        if (maybePrivacyGroup.isEmpty()
-            && !privacyController.isGroupAdditionTransaction(privateTransaction)) {
-          return new JsonRpcErrorResponse(id, JsonRpcError.ONCCHAIN_PRIVACY_GROUP_DOES_NOT_EXIST);
+            privacyController.retrieveOnChainPrivacyGroupWithToBeAddedMembers(
+                maybePrivacyGroupId.get(), enclavePublicKey, privateTransaction);
+        if (maybePrivacyGroup.isEmpty()) {
+          return new JsonRpcErrorResponse(id, JsonRpcError.ONCHAIN_PRIVACY_GROUP_DOES_NOT_EXIST);
         }
-      } else { // !onchainPirvacyGroupEnabled
+      } else { // !onchainPrivacyGroupEnabled
         if (maybePrivacyGroupId.isPresent()) {
           maybePrivacyGroup =
               privacyController.retrieveOffChainPrivacyGroup(
@@ -110,7 +109,7 @@ public class EeaSendRawTransaction implements JsonRpcMethod {
       }
 
       final ValidationResult<TransactionInvalidReason> validationResult =
-          privacyController.validatePrivateTransaction(privateTransaction, enclavePublicKey);
+          privacyController.validatePrivateTransaction(privateTransaction, enclavePublicKey, maybePrivacyGroup);
       if (!validationResult.isValid()) {
         return new JsonRpcErrorResponse(
             id, convertTransactionInvalidReason(validationResult.getInvalidReason()));

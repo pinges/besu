@@ -58,6 +58,8 @@ public interface GenesisConfigOptions {
 
   OptionalLong getMuirGlacierBlockNumber();
 
+  OptionalLong getBerlinBlockNumber();
+
   // TODO EIP-1559 change for the actual fork name when known
   OptionalLong getEIP1559BlockNumber();
 
@@ -157,6 +159,18 @@ public interface GenesisConfigOptions {
   OptionalInt getContractSizeLimit();
 
   OptionalInt getEvmStackSize();
+
+  /**
+   * Number of rounds contained within an Era for calculating Ethereum Classic Emission Schedule,
+   * ECIP defines this as 5,000,000 however this config option allows for adjusting (for using with
+   * other networks, for example Mordor testnet uses 2,000,000). The values defaults to 5,000,000 if
+   * not set.
+   *
+   * @see <a
+   *     href="https://ecips.ethereumclassic.org/ECIPs/ecip-1017">https://ecips.ethereumclassic.org/ECIPs/ecip-1017</a>
+   * @return number of rounds pre Era
+   */
+  OptionalLong getEcip1017EraRounds();
 
   Map<String, Object> asMap();
 

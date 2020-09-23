@@ -19,8 +19,11 @@ import static com.google.common.collect.Streams.stream;
 import static java.util.stream.Collectors.toList;
 import static org.apache.tuweni.net.tls.VertxTrustOptions.whitelistClients;
 
+import org.hyperledger.besu.ethereum.api.handlers.HandlerFactory;
+import org.hyperledger.besu.ethereum.api.handlers.TimeoutOptions;
 import org.hyperledger.besu.ethereum.api.jsonrpc.authentication.AuthenticationService;
 import org.hyperledger.besu.ethereum.api.jsonrpc.authentication.AuthenticationUtils;
+import org.hyperledger.besu.ethereum.api.jsonrpc.context.ContextKey;
 import org.hyperledger.besu.ethereum.api.jsonrpc.health.HealthService;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequest;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
@@ -173,7 +176,7 @@ public class JsonRpcHttpService {
   }
 
   public CompletableFuture<?> start() {
-    LOG.info("Starting JsonRPC service on {}:{}", config.getHost(), config.getPort());
+    LOG.info("Starting JSON-RPC service on {}:{}", config.getHost(), config.getPort());
 
     final CompletableFuture<?> resultFuture = new CompletableFuture<>();
     try {
@@ -187,7 +190,7 @@ public class JsonRpcHttpService {
                   resultFuture.complete(null);
                   config.setPort(httpServer.actualPort());
                   LOG.info(
-                      "JsonRPC service started and listening on {}:{}{}",
+                      "JSON-RPC service started and listening on {}:{}{}",
                       config.getHost(),
                       config.getPort(),
                       tlsLogMessage());
@@ -213,7 +216,7 @@ public class JsonRpcHttpService {
       resultFuture.completeExceptionally(
           new JsonRpcServiceException(
               String.format(
-                  "Ethereum JSON RPC listener failed to start: %s",
+                  "Ethereum JSON-RPC listener failed to start: %s",
                   ExceptionUtils.rootCause(listenException).getMessage())));
     }
 
@@ -225,7 +228,7 @@ public class JsonRpcHttpService {
     final Router router = Router.router(vertx);
 
     // Verify Host header to avoid rebind attack.
-    router.route().handler(checkWhitelistHostHeader());
+    router.route().handler(checkAllowlistHostHeader());
 
     router
         .route()
@@ -252,6 +255,9 @@ public class JsonRpcHttpService {
         .route("/")
         .method(HttpMethod.POST)
         .produces(APPLICATION_JSON)
+        .handler(
+            HandlerFactory.timeout(
+                new TimeoutOptions(config.getHttpTimeoutSec()), rpcMethods, true))
         .handler(this::handleJsonRPCRequest);
 
     if (authenticationService.isPresent()) {
@@ -293,7 +299,8 @@ public class JsonRpcHttpService {
           .setPfxKeyCertOptions(
               new PfxOptions()
                   .setPath(tlsConfiguration.getKeyStorePath().toString())
-                  .setPassword(tlsConfiguration.getKeyStorePassword()));
+                  .setPassword(tlsConfiguration.getKeyStorePassword()))
+          .setUseAlpn(true);
 
       tlsConfiguration
           .getClientAuthConfiguration()
@@ -303,7 +310,7 @@ public class JsonRpcHttpService {
     } catch (final RuntimeException re) {
       throw new JsonRpcServiceException(
           String.format(
-              "TLS options failed to initialize for Ethereum JSON RPC listener: %s",
+              "TLS options failed to initialize for Ethereum JSON-RPC listener: %s",
               re.getMessage()));
     }
   }
@@ -329,17 +336,17 @@ public class JsonRpcHttpService {
     if (listenFailure instanceof SocketException) {
       return new JsonRpcServiceException(
           String.format(
-              "Failed to bind Ethereum JSON RPC listener to %s:%s: %s",
+              "Failed to bind Ethereum JSON-RPC listener to %s:%s: %s",
               config.getHost(), config.getPort(), listenFailure.getMessage()));
     }
     return listenFailure;
   }
 
-  private Handler<RoutingContext> checkWhitelistHostHeader() {
+  private Handler<RoutingContext> checkAllowlistHostHeader() {
     return event -> {
       final Optional<String> hostHeader = getAndValidateHostHeader(event);
-      if (config.getHostsWhitelist().contains("*")
-          || (hostHeader.isPresent() && hostIsInWhitelist(hostHeader.get()))) {
+      if (config.getHostsAllowlist().contains("*")
+          || (hostHeader.isPresent() && hostIsInAllowlist(hostHeader.get()))) {
         event.next();
       } else {
         final HttpServerResponse response = event.response();
@@ -370,13 +377,13 @@ public class JsonRpcHttpService {
     return Optional.ofNullable(Iterables.get(splitHostHeader, 0));
   }
 
-  private boolean hostIsInWhitelist(final String hostHeader) {
-    if (config.getHostsWhitelist().stream()
+  private boolean hostIsInAllowlist(final String hostHeader) {
+    if (config.getHostsAllowlist().stream()
         .anyMatch(
-            whitelistEntry -> whitelistEntry.toLowerCase().equals(hostHeader.toLowerCase()))) {
+            allowlistEntry -> allowlistEntry.toLowerCase().equals(hostHeader.toLowerCase()))) {
       return true;
     } else {
-      LOG.trace("Host not in whitelist: '{}'", hostHeader);
+      LOG.trace("Host not in allowlist: '{}'", hostHeader);
       return false;
     }
   }
@@ -429,10 +436,13 @@ public class JsonRpcHttpService {
       try {
         final String json = routingContext.getBodyAsString().trim();
         if (!json.isEmpty() && json.charAt(0) == '{') {
+          final JsonObject requestBodyJsonObject =
+              ContextKey.REQUEST_BODY_AS_JSON_OBJECT.extractFrom(
+                  routingContext, () -> new JsonObject(json));
           AuthenticationUtils.getUser(
               authenticationService,
               token,
-              user -> handleJsonSingleRequest(routingContext, new JsonObject(json), user));
+              user -> handleJsonSingleRequest(routingContext, requestBodyJsonObject, user));
         } else {
           final JsonArray array = new JsonArray(json);
           if (array.size() < 1) {
@@ -460,18 +470,19 @@ public class JsonRpcHttpService {
     final HttpServerResponse response = routingContext.response();
     vertx.executeBlocking(
         future -> {
-          final JsonRpcResponse jsonRpcResponse = process(request, user);
+          final JsonRpcResponse jsonRpcResponse = process(routingContext, request, user);
           future.complete(jsonRpcResponse);
         },
         false,
         (res) -> {
-          if (res.failed()) {
-            response.setStatusCode(HttpResponseStatus.INTERNAL_SERVER_ERROR.code()).end();
-            return;
-          }
+          if (!response.closed() && !response.headWritten()) {
+            if (res.failed()) {
+              response.setStatusCode(HttpResponseStatus.INTERNAL_SERVER_ERROR.code()).end();
+              return;
+            }
 
-          final JsonRpcResponse jsonRpcResponse = (JsonRpcResponse) res.result();
-          if (!response.closed()) {
+            final JsonRpcResponse jsonRpcResponse = (JsonRpcResponse) res.result();
+
             response
                 .setStatusCode(status(jsonRpcResponse).code())
                 .putHeader("Content-Type", APPLICATION_JSON)
@@ -519,7 +530,7 @@ public class JsonRpcHttpService {
                   final JsonObject req = (JsonObject) obj;
                   final Future<JsonRpcResponse> fut = Future.future();
                   vertx.executeBlocking(
-                      future -> future.complete(process(req, user)),
+                      future -> future.complete(process(routingContext, req, user)),
                       false,
                       ar -> {
                         if (ar.failed()) {
@@ -536,7 +547,7 @@ public class JsonRpcHttpService {
         .setHandler(
             (res) -> {
               final HttpServerResponse response = routingContext.response();
-              if (response.closed()) {
+              if (response.closed() || response.headWritten()) {
                 return;
               }
               if (res.failed()) {
@@ -557,7 +568,8 @@ public class JsonRpcHttpService {
     return result.getType() != JsonRpcResponseType.NONE;
   }
 
-  private JsonRpcResponse process(final JsonObject requestJson, final Optional<User> user) {
+  private JsonRpcResponse process(
+      final RoutingContext ctx, final JsonObject requestJson, final Optional<User> user) {
     final JsonRpcRequest requestBody;
     Object id = null;
     try {
@@ -584,9 +596,11 @@ public class JsonRpcHttpService {
       try (final OperationTimer.TimingContext ignored =
           requestTimer.labels(requestBody.getMethod()).startTimer()) {
         if (user.isPresent()) {
-          return method.response(new JsonRpcRequestContext(requestBody, user.get()));
+          return method.response(
+              new JsonRpcRequestContext(requestBody, user.get(), () -> !ctx.response().closed()));
         }
-        return method.response(new JsonRpcRequestContext(requestBody));
+        return method.response(
+            new JsonRpcRequestContext(requestBody, () -> !ctx.response().closed()));
       } catch (final InvalidJsonRpcParameters e) {
         LOG.debug("Invalid Params", e);
         return errorResponse(id, JsonRpcError.INVALID_PARAMS);

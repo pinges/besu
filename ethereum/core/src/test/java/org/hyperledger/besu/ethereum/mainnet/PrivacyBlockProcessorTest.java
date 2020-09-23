@@ -19,6 +19,7 @@ import static org.hyperledger.besu.ethereum.core.PrivateTransactionDataFixture.V
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,6 +37,7 @@ import org.hyperledger.besu.ethereum.core.PrivateTransactionDataFixture;
 import org.hyperledger.besu.ethereum.core.TransactionReceipt;
 import org.hyperledger.besu.ethereum.core.Wei;
 import org.hyperledger.besu.ethereum.core.WorldUpdater;
+import org.hyperledger.besu.ethereum.privacy.PrivateStateRootResolver;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransactionProcessor;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivacyGroupHeadBlockMap;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivateBlockMetadata;
@@ -59,7 +61,7 @@ public class PrivacyBlockProcessorTest {
   private AbstractBlockProcessor blockProcessor;
   private WorldStateArchive privateWorldStateArchive;
   private Enclave enclave;
-  private ProtocolSchedule<?> protocolSchedule;
+  private ProtocolSchedule protocolSchedule;
   private WorldStateArchive publicWorldStateArchive;
 
   @Before
@@ -75,7 +77,8 @@ public class PrivacyBlockProcessorTest {
             protocolSchedule,
             enclave,
             privateStateStorage,
-            privateWorldStateArchive);
+            privateWorldStateArchive,
+            new PrivateStateRootResolver(privateStateStorage));
     publicWorldStateArchive = mock(WorldStateArchive.class);
     privacyBlockProcessor.setPublicWorldStateArchive(publicWorldStateArchive);
   }
@@ -101,18 +104,20 @@ public class PrivacyBlockProcessorTest {
         .contains(expected);
     verify(blockProcessor)
         .processBlock(
-            blockchain,
-            mutableWorldState,
-            firstBlock.getHeader(),
-            firstBlock.getBody().getTransactions(),
-            firstBlock.getBody().getOmmers());
+            eq(blockchain),
+            eq(mutableWorldState),
+            eq(firstBlock.getHeader()),
+            eq(firstBlock.getBody().getTransactions()),
+            eq(firstBlock.getBody().getOmmers()),
+            any());
     verify(blockProcessor)
         .processBlock(
-            blockchain,
-            mutableWorldState,
-            secondBlock.getHeader(),
-            secondBlock.getBody().getTransactions(),
-            secondBlock.getBody().getOmmers());
+            eq(blockchain),
+            eq(mutableWorldState),
+            eq(secondBlock.getHeader()),
+            eq(secondBlock.getBody().getTransactions()),
+            eq(secondBlock.getBody().getOmmers()),
+            any());
   }
 
   @SuppressWarnings({"rawtypes", "unchecked"})
@@ -162,11 +167,12 @@ public class PrivacyBlockProcessorTest {
     privacyBlockProcessor.processBlock(blockchain, mutableWorldState, secondBlock);
     verify(blockProcessor)
         .processBlock(
-            blockchain,
-            mutableWorldState,
-            secondBlock.getHeader(),
-            secondBlock.getBody().getTransactions(),
-            secondBlock.getBody().getOmmers());
+            eq(blockchain),
+            eq(mutableWorldState),
+            eq(secondBlock.getHeader()),
+            eq(secondBlock.getBody().getTransactions()),
+            eq(secondBlock.getBody().getOmmers()),
+            any());
   }
 
   private MutableWorldState mockPrivateStateArchive() {
@@ -189,7 +195,7 @@ public class PrivacyBlockProcessorTest {
             any(), any(), any(), any(), any(), any(), anyBoolean(), any()))
         .thenReturn(
             MainnetTransactionProcessor.Result.successful(
-                Collections.emptyList(), 0, Bytes.EMPTY, ValidationResult.valid()));
+                Collections.emptyList(), 0, 0, Bytes.EMPTY, ValidationResult.valid()));
     when(protocolSpec.getTransactionProcessor()).thenReturn(mockPublicTransactionProcessor);
     final PrivateTransactionProcessor mockPrivateTransactionProcessor =
         mock(PrivateTransactionProcessor.class);
@@ -197,7 +203,7 @@ public class PrivacyBlockProcessorTest {
             any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(
             PrivateTransactionProcessor.Result.successful(
-                Collections.emptyList(), 0, Bytes.EMPTY, ValidationResult.valid()));
+                Collections.emptyList(), 0, 0, Bytes.EMPTY, ValidationResult.valid()));
     when(protocolSpec.getPrivateTransactionProcessor()).thenReturn(mockPrivateTransactionProcessor);
     final AbstractBlockProcessor.TransactionReceiptFactory mockTransactionReceiptFactory =
         mock(AbstractBlockProcessor.TransactionReceiptFactory.class);

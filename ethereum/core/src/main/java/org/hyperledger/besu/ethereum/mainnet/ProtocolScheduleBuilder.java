@@ -16,8 +16,10 @@ package org.hyperledger.besu.ethereum.mainnet;
 
 import org.hyperledger.besu.config.GenesisConfigOptions;
 import org.hyperledger.besu.config.experimental.ExperimentalEIPs;
+import org.hyperledger.besu.ethereum.chain.BadBlockManager;
 import org.hyperledger.besu.ethereum.core.PrivacyParameters;
 import org.hyperledger.besu.ethereum.core.fees.FeeMarket;
+import org.hyperledger.besu.ethereum.core.fees.TransactionPriceCalculator;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransactionValidator;
 
 import java.math.BigInteger;
@@ -28,20 +30,21 @@ import java.util.function.Function;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-public class ProtocolScheduleBuilder<C> {
+public class ProtocolScheduleBuilder {
 
   private static final Logger LOG = LogManager.getLogger();
   private final GenesisConfigOptions config;
-  private final Function<ProtocolSpecBuilder<Void>, ProtocolSpecBuilder<C>> protocolSpecAdapter;
+  private final Function<ProtocolSpecBuilder, ProtocolSpecBuilder> protocolSpecAdapter;
   private final Optional<BigInteger> defaultChainId;
   private final PrivacyParameters privacyParameters;
   private final boolean isRevertReasonEnabled;
   private final FeeMarket feeMarket = FeeMarket.eip1559();
+  private final BadBlockManager badBlockManager = new BadBlockManager();
 
   public ProtocolScheduleBuilder(
       final GenesisConfigOptions config,
       final BigInteger defaultChainId,
-      final Function<ProtocolSpecBuilder<Void>, ProtocolSpecBuilder<C>> protocolSpecAdapter,
+      final Function<ProtocolSpecBuilder, ProtocolSpecBuilder> protocolSpecAdapter,
       final PrivacyParameters privacyParameters,
       final boolean isRevertReasonEnabled) {
     this(
@@ -54,7 +57,7 @@ public class ProtocolScheduleBuilder<C> {
 
   public ProtocolScheduleBuilder(
       final GenesisConfigOptions config,
-      final Function<ProtocolSpecBuilder<Void>, ProtocolSpecBuilder<C>> protocolSpecAdapter,
+      final Function<ProtocolSpecBuilder, ProtocolSpecBuilder> protocolSpecAdapter,
       final PrivacyParameters privacyParameters,
       final boolean isRevertReasonEnabled) {
     this(config, Optional.empty(), protocolSpecAdapter, privacyParameters, isRevertReasonEnabled);
@@ -63,7 +66,7 @@ public class ProtocolScheduleBuilder<C> {
   private ProtocolScheduleBuilder(
       final GenesisConfigOptions config,
       final Optional<BigInteger> defaultChainId,
-      final Function<ProtocolSpecBuilder<Void>, ProtocolSpecBuilder<C>> protocolSpecAdapter,
+      final Function<ProtocolSpecBuilder, ProtocolSpecBuilder> protocolSpecAdapter,
       final PrivacyParameters privacyParameters,
       final boolean isRevertReasonEnabled) {
     this.config = config;
@@ -73,10 +76,10 @@ public class ProtocolScheduleBuilder<C> {
     this.isRevertReasonEnabled = isRevertReasonEnabled;
   }
 
-  public ProtocolSchedule<C> createProtocolSchedule() {
+  public ProtocolSchedule createProtocolSchedule() {
     final Optional<BigInteger> chainId =
         config.getChainId().map(Optional::of).orElse(defaultChainId);
-    final MutableProtocolSchedule<C> protocolSchedule = new MutableProtocolSchedule<>(chainId);
+    final MutableProtocolSchedule protocolSchedule = new MutableProtocolSchedule(chainId);
 
     validateForkOrdering();
 
@@ -95,7 +98,7 @@ public class ProtocolScheduleBuilder<C> {
         .getDaoForkBlock()
         .ifPresent(
             daoBlockNumber -> {
-              final ProtocolSpec<C> originalProtocolSpec =
+              final ProtocolSpec originalProtocolSpec =
                   protocolSchedule.getByBlockNumber(daoBlockNumber);
               addProtocolSpec(
                   protocolSchedule,
@@ -163,12 +166,26 @@ public class ProtocolScheduleBuilder<C> {
             config.getEvmStackSize(),
             isRevertReasonEnabled));
 
+    if (ExperimentalEIPs.berlinEnabled) {
+      addProtocolSpec(
+          protocolSchedule,
+          config.getBerlinBlockNumber(),
+          MainnetProtocolSpecs.berlinDefinition(
+              chainId,
+              config.getContractSizeLimit(),
+              config.getEvmStackSize(),
+              isRevertReasonEnabled));
+    }
+
     if (ExperimentalEIPs.eip1559Enabled) {
+      final Optional<TransactionPriceCalculator> transactionPriceCalculator =
+          Optional.of(TransactionPriceCalculator.eip1559());
       addProtocolSpec(
           protocolSchedule,
           config.getEIP1559BlockNumber(),
           MainnetProtocolSpecs.eip1559Definition(
               chainId,
+              transactionPriceCalculator,
               config.getContractSizeLimit(),
               config.getEvmStackSize(),
               isRevertReasonEnabled,
@@ -180,9 +197,10 @@ public class ProtocolScheduleBuilder<C> {
               config
                       .getEIP1559BlockNumber()
                       .orElseThrow(() -> new RuntimeException("EIP-1559 must be enabled"))
-                  + feeMarket.getDecayRange()),
+                  + feeMarket.getMigrationDurationInBlocks()),
           MainnetProtocolSpecs.eip1559FinalizedDefinition(
               chainId,
+              transactionPriceCalculator,
               config.getContractSizeLimit(),
               config.getEvmStackSize(),
               isRevertReasonEnabled,
@@ -194,7 +212,7 @@ public class ProtocolScheduleBuilder<C> {
         .getClassicForkBlock()
         .ifPresent(
             classicBlockNumber -> {
-              final ProtocolSpec<C> originalProtocolSpce =
+              final ProtocolSpec originalProtocolSpce =
                   protocolSchedule.getByBlockNumber(classicBlockNumber);
               addProtocolSpec(
                   protocolSchedule,
@@ -218,12 +236,18 @@ public class ProtocolScheduleBuilder<C> {
         protocolSchedule,
         config.getGothamBlockNumber(),
         ClassicProtocolSpecs.gothamDefinition(
-            chainId, config.getContractSizeLimit(), config.getEvmStackSize()));
+            chainId,
+            config.getContractSizeLimit(),
+            config.getEvmStackSize(),
+            config.getEcip1017EraRounds()));
     addProtocolSpec(
         protocolSchedule,
         config.getDefuseDifficultyBombBlockNumber(),
         ClassicProtocolSpecs.defuseDifficultyBombDefinition(
-            chainId, config.getContractSizeLimit(), config.getEvmStackSize()));
+            chainId,
+            config.getContractSizeLimit(),
+            config.getEvmStackSize(),
+            config.getEcip1017EraRounds()));
     addProtocolSpec(
         protocolSchedule,
         config.getAtlantisBlockNumber(),
@@ -231,7 +255,8 @@ public class ProtocolScheduleBuilder<C> {
             chainId,
             config.getContractSizeLimit(),
             config.getEvmStackSize(),
-            isRevertReasonEnabled));
+            isRevertReasonEnabled,
+            config.getEcip1017EraRounds()));
     addProtocolSpec(
         protocolSchedule,
         config.getAghartaBlockNumber(),
@@ -239,7 +264,8 @@ public class ProtocolScheduleBuilder<C> {
             chainId,
             config.getContractSizeLimit(),
             config.getEvmStackSize(),
-            isRevertReasonEnabled));
+            isRevertReasonEnabled,
+            config.getEcip1017EraRounds()));
     addProtocolSpec(
         protocolSchedule,
         config.getPhoenixBlockNumber(),
@@ -247,22 +273,24 @@ public class ProtocolScheduleBuilder<C> {
             chainId,
             config.getContractSizeLimit(),
             config.getEvmStackSize(),
-            isRevertReasonEnabled));
+            isRevertReasonEnabled,
+            config.getEcip1017EraRounds()));
 
     LOG.info("Protocol schedule created with milestones: {}", protocolSchedule.listMilestones());
     return protocolSchedule;
   }
 
   private void addProtocolSpec(
-      final MutableProtocolSchedule<C> protocolSchedule,
+      final MutableProtocolSchedule protocolSchedule,
       final OptionalLong blockNumber,
-      final ProtocolSpecBuilder<Void> definition) {
+      final ProtocolSpecBuilder definition) {
     blockNumber.ifPresent(
         number ->
             protocolSchedule.putMilestone(
                 number,
                 protocolSpecAdapter
                     .apply(definition)
+                    .badBlocksManager(badBlockManager)
                     .privacyParameters(privacyParameters)
                     .privateTransactionValidatorBuilder(
                         () -> new PrivateTransactionValidator(protocolSchedule.getChainId()))
@@ -307,6 +335,9 @@ public class ProtocolScheduleBuilder<C> {
     lastForkBlock = validateForkOrder("Istanbul", config.getIstanbulBlockNumber(), lastForkBlock);
     lastForkBlock =
         validateForkOrder("MuirGlacier", config.getMuirGlacierBlockNumber(), lastForkBlock);
+    if (ExperimentalEIPs.berlinEnabled) {
+      lastForkBlock = validateForkOrder("Berlin", config.getBerlinBlockNumber(), lastForkBlock);
+    }
     assert (lastForkBlock >= 0);
   }
 

@@ -53,7 +53,7 @@ public class JsonRpcMethodsFactory {
       final P2PNetwork p2pNetwork,
       final BlockchainQueries blockchainQueries,
       final Synchronizer synchronizer,
-      final ProtocolSchedule<?> protocolSchedule,
+      final ProtocolSchedule protocolSchedule,
       final FilterManager filterManager,
       final TransactionPool transactionPool,
       final MiningCoordinator miningCoordinator,
@@ -84,7 +84,8 @@ public class JsonRpcMethodsFactory {
                   blockchainQueries,
                   namedPlugins,
                   natService),
-              new DebugJsonRpcMethods(blockchainQueries, protocolSchedule, metricsSystem),
+              new DebugJsonRpcMethods(
+                  blockchainQueries, protocolSchedule, metricsSystem, transactionPool),
               new EeaJsonRpcMethods(
                   blockchainQueries, protocolSchedule, transactionPool, privacyParameters),
               new EthJsonRpcMethods(
@@ -97,14 +98,18 @@ public class JsonRpcMethodsFactory {
                   supportedCapabilities),
               new NetJsonRpcMethods(
                   p2pNetwork,
-                  protocolSchedule,
+                  networkId,
                   jsonRpcConfiguration,
                   webSocketConfiguration,
                   metricsConfiguration),
               new MinerJsonRpcMethods(miningCoordinator),
               new PermJsonRpcMethods(accountsWhitelistController, nodeWhitelistController),
               new PrivJsonRpcMethods(
-                  blockchainQueries, protocolSchedule, transactionPool, privacyParameters),
+                  blockchainQueries,
+                  protocolSchedule,
+                  transactionPool,
+                  privacyParameters,
+                  filterManager),
               new PrivxJsonRpcMethods(
                   blockchainQueries, protocolSchedule, transactionPool, privacyParameters),
               new Web3JsonRpcMethods(clientVersion),

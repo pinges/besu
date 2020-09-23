@@ -46,7 +46,8 @@ public class InMemoryStorageProvider implements StorageProvider {
     return DefaultBlockchain.createMutable(
         genesisBlock,
         new KeyValueStoragePrefixedKeyBlockchainStorage(keyValueStorage, blockHeaderFunctions),
-        new NoOpMetricsSystem());
+        new NoOpMetricsSystem(),
+        0);
   }
 
   public static WorldStateArchive createInMemoryWorldStateArchive() {
@@ -66,7 +67,7 @@ public class InMemoryStorageProvider implements StorageProvider {
   }
 
   @Override
-  public BlockchainStorage createBlockchainStorage(final ProtocolSchedule<?> protocolSchedule) {
+  public BlockchainStorage createBlockchainStorage(final ProtocolSchedule protocolSchedule) {
     return new KeyValueStoragePrefixedKeyBlockchainStorage(
         new InMemoryKeyValueStorage(), ScheduleBasedBlockHeaderFunctions.create(protocolSchedule));
   }

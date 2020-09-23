@@ -37,26 +37,26 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.tuweni.bytes.Bytes;
 
-public abstract class AbstractMinerExecutor<
-    C, M extends BlockMiner<C, ? extends AbstractBlockCreator<C>>> {
+public abstract class AbstractMinerExecutor<M extends BlockMiner<? extends AbstractBlockCreator>> {
 
   private static final Logger LOG = LogManager.getLogger();
 
   private final ExecutorService executorService = Executors.newCachedThreadPool();
-  protected final ProtocolContext<C> protocolContext;
-  protected final ProtocolSchedule<C> protocolSchedule;
+  protected final ProtocolContext protocolContext;
+  protected final ProtocolSchedule protocolSchedule;
   protected final PendingTransactions pendingTransactions;
   protected final AbstractBlockScheduler blockScheduler;
   protected final Function<Long, Long> gasLimitCalculator;
 
   protected volatile Bytes extraData;
   protected volatile Wei minTransactionGasPrice;
+  protected volatile Double minBlockOccupancyRatio;
 
   private final AtomicBoolean stopped = new AtomicBoolean(false);
 
-  public AbstractMinerExecutor(
-      final ProtocolContext<C> protocolContext,
-      final ProtocolSchedule<C> protocolSchedule,
+  protected AbstractMinerExecutor(
+      final ProtocolContext protocolContext,
+      final ProtocolSchedule protocolSchedule,
       final PendingTransactions pendingTransactions,
       final MiningParameters miningParams,
       final AbstractBlockScheduler blockScheduler,
@@ -68,6 +68,7 @@ public abstract class AbstractMinerExecutor<
     this.minTransactionGasPrice = miningParams.getMinTransactionGasPrice();
     this.blockScheduler = blockScheduler;
     this.gasLimitCalculator = gasLimitCalculator;
+    this.minBlockOccupancyRatio = miningParams.getMinBlockOccupancyRatio();
   }
 
   public Optional<M> startAsyncMining(

@@ -219,7 +219,7 @@ public class FrontierGasCalculator implements GasCalculator {
    *
    * @return the gas cost to transfer funds in a call operation
    */
-  protected Gas callValueTransferGasCost() {
+  Gas callValueTransferGasCost() {
     return CALL_VALUE_TRANSFER_GAS_COST;
   }
 
@@ -228,7 +228,7 @@ public class FrontierGasCalculator implements GasCalculator {
    *
    * @return the gas cost to create a new account
    */
-  protected Gas newAccountGasCost() {
+  Gas newAccountGasCost() {
     return NEW_ACCOUNT_GAS_COST;
   }
 
@@ -438,6 +438,12 @@ public class FrontierGasCalculator implements GasCalculator {
   @Override
   public Gas getSelfDestructRefundAmount() {
     return SELF_DESTRUCT_REFUND_AMOUNT;
+  }
+
+  @Override
+  public Gas getBeginSubGasCost() {
+    throw new UnsupportedOperationException(
+        "BEGINSUB operation not supported by " + getClass().getSimpleName());
   }
 
   private Gas copyWordsToMemoryGasCost(

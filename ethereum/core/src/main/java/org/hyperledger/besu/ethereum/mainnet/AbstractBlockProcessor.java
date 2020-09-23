@@ -14,17 +14,20 @@
  */
 package org.hyperledger.besu.ethereum.mainnet;
 
+import org.hyperledger.besu.config.experimental.ExperimentalEIPs;
 import org.hyperledger.besu.ethereum.chain.Blockchain;
 import org.hyperledger.besu.ethereum.core.Address;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.core.MutableWorldState;
-import org.hyperledger.besu.ethereum.core.ProcessableBlockHeader;
 import org.hyperledger.besu.ethereum.core.Transaction;
 import org.hyperledger.besu.ethereum.core.TransactionReceipt;
 import org.hyperledger.besu.ethereum.core.Wei;
 import org.hyperledger.besu.ethereum.core.WorldState;
 import org.hyperledger.besu.ethereum.core.WorldUpdater;
+import org.hyperledger.besu.ethereum.core.fees.TransactionGasBudgetCalculator;
+import org.hyperledger.besu.ethereum.privacy.storage.PrivateMetadataUpdater;
 import org.hyperledger.besu.ethereum.vm.BlockHashLookup;
+import org.hyperledger.besu.ethereum.vm.OperationTracer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -81,7 +84,7 @@ public abstract class AbstractBlockProcessor implements BlockProcessor {
 
   private final TransactionProcessor transactionProcessor;
 
-  private final MainnetBlockProcessor.TransactionReceiptFactory transactionReceiptFactory;
+  private final AbstractBlockProcessor.TransactionReceiptFactory transactionReceiptFactory;
 
   final Wei blockReward;
 
@@ -89,26 +92,21 @@ public abstract class AbstractBlockProcessor implements BlockProcessor {
 
   private final MiningBeneficiaryCalculator miningBeneficiaryCalculator;
 
-  public AbstractBlockProcessor(final AbstractBlockProcessor blockProcessor) {
-    this(
-        blockProcessor.transactionProcessor,
-        blockProcessor.transactionReceiptFactory,
-        blockProcessor.blockReward,
-        blockProcessor.miningBeneficiaryCalculator,
-        blockProcessor.skipZeroBlockRewards);
-  }
+  private final TransactionGasBudgetCalculator gasBudgetCalculator;
 
-  public AbstractBlockProcessor(
+  protected AbstractBlockProcessor(
       final TransactionProcessor transactionProcessor,
-      final MainnetBlockProcessor.TransactionReceiptFactory transactionReceiptFactory,
+      final TransactionReceiptFactory transactionReceiptFactory,
       final Wei blockReward,
       final MiningBeneficiaryCalculator miningBeneficiaryCalculator,
-      final boolean skipZeroBlockRewards) {
+      final boolean skipZeroBlockRewards,
+      final TransactionGasBudgetCalculator gasBudgetCalculator) {
     this.transactionProcessor = transactionProcessor;
     this.transactionReceiptFactory = transactionReceiptFactory;
     this.blockReward = blockReward;
     this.miningBeneficiaryCalculator = miningBeneficiaryCalculator;
     this.skipZeroBlockRewards = skipZeroBlockRewards;
+    this.gasBudgetCalculator = gasBudgetCalculator;
   }
 
   @Override
@@ -117,14 +115,23 @@ public abstract class AbstractBlockProcessor implements BlockProcessor {
       final MutableWorldState worldState,
       final BlockHeader blockHeader,
       final List<Transaction> transactions,
-      final List<BlockHeader> ommers) {
+      final List<BlockHeader> ommers,
+      final PrivateMetadataUpdater privateMetadataUpdater) {
 
-    long gasUsed = 0;
+    long legacyGasUsed = 0;
+    long eip1556GasUsed = 0;
     final List<TransactionReceipt> receipts = new ArrayList<>();
 
     for (final Transaction transaction : transactions) {
-      final long remainingGasBudget = blockHeader.getGasLimit() - gasUsed;
-      if (Long.compareUnsigned(transaction.getGasLimit(), remainingGasBudget) > 0) {
+      long currentGasUsed;
+      if (ExperimentalEIPs.eip1559Enabled && transaction.isEIP1559Transaction()) {
+        currentGasUsed = eip1556GasUsed;
+      } else {
+        currentGasUsed = legacyGasUsed;
+      }
+      final long remainingGasBudget = blockHeader.getGasLimit() - currentGasUsed;
+      if (!gasBudgetCalculator.hasBudget(
+          transaction, blockHeader.getNumber(), blockHeader.getGasLimit(), currentGasUsed)) {
         LOG.warn(
             "Transaction processing error: transaction gas limit {} exceeds available block budget remaining {}",
             transaction.getGasLimit(),
@@ -144,17 +151,27 @@ public abstract class AbstractBlockProcessor implements BlockProcessor {
               blockHeader,
               transaction,
               miningBeneficiary,
+              OperationTracer.NO_TRACING,
               blockHashLookup,
               true,
-              TransactionValidationParams.processingBlock());
+              TransactionValidationParams.processingBlock(),
+              privateMetadataUpdater);
       if (result.isInvalid()) {
         return AbstractBlockProcessor.Result.failed();
       }
 
       worldStateUpdater.commit();
-      gasUsed = transaction.getGasLimit() - result.getGasRemaining() + gasUsed;
+
+      currentGasUsed = transaction.getGasLimit() - result.getGasRemaining() + currentGasUsed;
+
+      if (ExperimentalEIPs.eip1559Enabled && transaction.isEIP1559Transaction()) {
+        eip1556GasUsed = currentGasUsed;
+      } else {
+        legacyGasUsed = currentGasUsed;
+      }
+
       final TransactionReceipt transactionReceipt =
-          transactionReceiptFactory.create(result, worldState, gasUsed);
+          transactionReceiptFactory.create(result, worldState, legacyGasUsed + eip1556GasUsed);
       receipts.add(transactionReceipt);
     }
 
@@ -166,9 +183,13 @@ public abstract class AbstractBlockProcessor implements BlockProcessor {
     return AbstractBlockProcessor.Result.successful(receipts);
   }
 
+  protected MiningBeneficiaryCalculator getMiningBeneficiaryCalculator() {
+    return miningBeneficiaryCalculator;
+  }
+
   abstract boolean rewardCoinbase(
       final MutableWorldState worldState,
-      final ProcessableBlockHeader header,
+      final BlockHeader header,
       final List<BlockHeader> ommers,
       final boolean skipZeroBlockRewards);
 }

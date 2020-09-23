@@ -20,13 +20,13 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 import java.text.SimpleDateFormat
 
 plugins {
-  id 'com.diffplug.gradle.spotless' version '3.25.0'
-  id 'com.jfrog.bintray' version '1.8.4'
-  id 'com.github.ben-manes.versions' version '0.26.0'
+  id 'com.diffplug.gradle.spotless' version '4.3.0'
+  id 'com.jfrog.bintray' version '1.8.5'
+  id 'com.github.ben-manes.versions' version '0.28.0'
   id 'com.github.hierynomus.license' version '0.15.0'
-  id 'io.spring.dependency-management' version '1.0.8.RELEASE'
+  id 'io.spring.dependency-management' version '1.0.9.RELEASE'
   id 'me.champeau.gradle.jmh' version '0.5.0' apply false
-  id 'net.ltgt.errorprone' version '1.1.1'
+  id 'net.ltgt.errorprone' version '1.2.1'
 }
 
 if (!JavaVersion.current().java11Compatible) {
@@ -123,8 +123,9 @@ allprojects {
     jcenter()
     mavenCentral()
     mavenLocal()
+    maven { url "https://hyperledger-org.bintray.com/besu-repo" }
     maven { url "https://consensys.bintray.com/pegasys-repo" }
-    maven { url "https://repository.apache.org/content/repositories/snapshots/" }
+    maven { url "https://repo.spring.io/libs-release" }
   }
 
   dependencies { errorprone "com.google.errorprone:error_prone_core" }
@@ -150,7 +151,6 @@ allprojects {
       target '*.gradle'
       greclipse().configFile(rootProject.file('gradle/formatter.properties'))
       endWithNewline()
-      paddedCell()
     }
 
     // Below this line are currently only license header tasks
@@ -232,6 +232,9 @@ allprojects {
    *   with the 'include' option above since it is a pattern, but this is a slightly more convenient
    *   option.
    * - 'root.log.level' and 'evm.log.level': allow to control the log level used during the tests.
+   * - 'acctests.keepLogsOfPassingTests': log files of failed acceptance tests are always saved.
+   *    This property additionally keeps the log files of successful tests.
+   *
    */
   test {
     jvmArgs = [
@@ -293,30 +296,62 @@ check.dependsOn('checkPluginAPIChanges', 'checkMavenCoordinateCollisions')
 
 subprojects {
 
-  sourceSets {
-    // test-support can be consumed as a library by other projects in their tests
-    testSupport {
-      java {
-        compileClasspath += main.output
-        runtimeClasspath += main.output
-        srcDir file('src/test-support/java')
+  if (file('src/test-support').directory) {
+    sourceSets {
+      // test-support can be consumed as a library by other projects in their tests
+      testSupport {
+        java {
+          compileClasspath += main.output
+          runtimeClasspath += main.output
+          srcDir file('src/test-support/java')
+        }
+        resources.srcDir file('src/test-support/resources')
       }
-      resources.srcDir file('src/test-support/resources')
     }
-    integrationTest {
-      java {
-        compileClasspath += main.output
-        runtimeClasspath += main.output
-        srcDir file('src/integration-test/java')
-      }
-      resources.srcDir file('src/integration-test/resources')
+
+    dependencies {
+      testImplementation sourceSets.testSupport.output
+    }
+
+    task testSupportJar(type: Jar) {
+      archiveBaseName = "${project.name}-support-test"
+      classifier = 'test-support'
+      from sourceSets.testSupport.output
     }
   }
 
-  task testSupportJar(type: Jar) {
-    archiveBaseName = "${project.name}-support-test"
-    classifier = 'test-support'
-    from sourceSets.testSupport.output
+  if (file('src/integration-test').directory) {
+    sourceSets {
+      integrationTest {
+        java {
+          compileClasspath += main.output
+          runtimeClasspath += main.output
+          srcDir file('src/integration-test/java')
+        }
+        resources.srcDir file('src/integration-test/resources')
+      }
+    }
+
+    if (file('src/test-support').directory) {
+      dependencies {
+        integrationTestImplementation sourceSets.testSupport.output
+      }
+    }
+
+    task integrationTest(type: Test, dependsOn: ["compileTestJava"]) {
+      group = "verification"
+      description = "Runs the Besu integration tests"
+
+      jvmArgs = [
+        '--add-opens',
+        'java.base/java.util=ALL-UNNAMED',
+        '--add-opens',
+        'java.base/java.util.concurrent=ALL-UNNAMED'
+      ]
+      testClassesDirs = sourceSets.integrationTest.output.classesDirs
+      classpath = sourceSets.integrationTest.runtimeClasspath
+      outputs.upToDateWhen { false }
+    }
   }
 
   def sourceSetIsPopulated = { sourceSetName ->
@@ -396,27 +431,6 @@ subprojects {
     testSupportArtifacts
   }
 
-
-  dependencies {
-    testImplementation sourceSets.testSupport.output
-    integrationTestImplementation sourceSets.testSupport.output
-  }
-
-  task integrationTest(type: Test, dependsOn: ["compileTestJava"]) {
-    group = "verification"
-    description = "Runs the Besu integration tests"
-
-    jvmArgs = [
-      '--add-opens',
-      'java.base/java.util=ALL-UNNAMED',
-      '--add-opens',
-      'java.base/java.util.concurrent=ALL-UNNAMED'
-    ]
-    testClassesDirs = sourceSets.integrationTest.output.classesDirs
-    classpath = sourceSets.integrationTest.runtimeClasspath
-    outputs.upToDateWhen { false }
-  }
-
   if (file('src/jmh').directory) {
     apply plugin: 'me.champeau.gradle.jmh'
 
@@ -447,14 +461,24 @@ apply plugin: 'application'
 mainClassName = 'org.hyperledger.besu.Besu'
 applicationDefaultJvmArgs = [
   '-Dvertx.disableFileCPResolving=true',
+  // BESU_HOME is replaced by a doFirst block in the run task.
   '-Dbesu.home=BESU_HOME',
   // We shutdown log4j ourselves, as otherwise this shutdown hook runs before our own and whatever
   // happens during shutdown is not logged.
   '-Dlog4j.shutdownHookEnabled=false',
+  // Suppress Java JPMS warnings.  Document the reason for each suppression.
   // Bouncy Castle needs access to sun.security.provider, which is not open by default.
-  // This suppresses an illegal access warning.
   '--add-opens',
-  'java.base/sun.security.provider=ALL-UNNAMED'
+  'java.base/sun.security.provider=ALL-UNNAMED',
+  // Jackson likes to access java.util.OptionalLong's constructor
+  '--add-opens',
+  'java.base/java.util=ALL-UNNAMED',
+  // suppress netty specific module warnings in debug
+  "-Dio.netty.tryReflectionSetAccessible=true",
+  "--add-exports",
+  "java.base/jdk.internal.misc=ALL-UNNAMED",
+  "--add-opens",
+  "java.base/java.nio=ALL-UNNAMED"
 ]
 
 run {
@@ -487,7 +511,7 @@ startScripts {
 
 
 dependencies {
-  compile project(':besu')
+  implementation project(':besu')
   errorprone 'com.google.errorprone:error_prone_core'
 }
 
@@ -520,6 +544,12 @@ distZip {
   }
 }
 
+def dockerVariants = [
+  "openjdk-11",
+  "graalvm",
+  "openjdk-latest"
+]
+
 // rename the top level dir from besu-<version> to besu and this makes it really
 // simple for use in docker
 tasks.register("dockerDistUntar") {
@@ -539,46 +569,60 @@ tasks.register("dockerDistUntar") {
   }
 }
 
-task distDocker(type: Exec) {
+task distDocker {
   dependsOn dockerDistUntar
+  inputs.dir("build/docker-besu/")
   def dockerBuildVersion = project.hasProperty('release.releaseVersion') ? project.property('release.releaseVersion') : "${rootProject.version}"
-  def imageName = "hyperledger/besu"
-  def image = "${imageName}:${dockerBuildVersion}"
   def dockerBuildDir = "build/docker-besu/"
-  workingDir "${dockerBuildDir}"
+  def imageName = "hyperledger/besu"
 
-  doFirst {
-    copy {
-      from file("${projectDir}/docker/Dockerfile")
-      into(workingDir)
+  doLast {
+    for (def variant in dockerVariants) {
+      copy {
+        from file("${projectDir}/docker/${variant}/Dockerfile")
+        into(dockerBuildDir)
+      }
+      exec {
+        def image = "${imageName}:${dockerBuildVersion}-${variant}"
+        executable "sh"
+        workingDir dockerBuildDir
+        args "-c", "docker build --build-arg BUILD_DATE=${buildTime()} --build-arg VERSION=${dockerBuildVersion} --build-arg VCS_REF=${getCheckedOutGitCommitHash()} -t ${image} ."
+      }
+    }
+    // tag the "default" (which is the variant in the zero position)
+    exec {
+      executable "sh"
+      args "-c", "docker tag '${imageName}:${dockerBuildVersion}-${dockerVariants[0]}' '${imageName}:${dockerBuildVersion}'"
     }
   }
-
-  executable "sh"
-  args "-c", "docker build --build-arg BUILD_DATE=${buildTime()} --build-arg VERSION=${dockerBuildVersion} --build-arg VCS_REF=${getCheckedOutGitCommitHash()} -t ${image} ."
 }
 
-task testDocker(type: Exec) {
+task testDocker {
   dependsOn distDocker
   def dockerReportsDir = "docker/reports/"
-  def image = project.hasProperty('release.releaseVersion') ? "hyperledger/besu:" + project.property('release.releaseVersion') : "hyperledger/besu:${project.version}"
-  workingDir "docker"
 
   doFirst {
     new File(dockerReportsDir).mkdir()
   }
 
-  executable "sh"
-  args "-c", "bash test.sh ${image}"
+  doLast {
+    for (def variant in dockerVariants) {
+      exec {
+        def image = project.hasProperty('release.releaseVersion') ? "hyperledger/besu:" + project.property('release.releaseVersion') : "hyperledger/besu:${project.version}"
+        workingDir "docker/${variant}"
+        executable "sh"
+        args "-c", "bash ../test.sh ${image}-${variant}"
+      }
+    }
+  }
 }
 
-task dockerUpload(type: Exec) {
+task dockerUpload {
   dependsOn distDocker
   def dockerBuildVersion = project.hasProperty('release.releaseVersion') ? project.property('release.releaseVersion') : "${rootProject.version}"
   def imageName = "hyperledger/besu"
   def azureImageName = "hyperledger.azurecr.io/besu"
   def image = "${imageName}:${dockerBuildVersion}"
-  def cmd = "docker push '${image}'"
   def additionalTags = []
 
   if (project.hasProperty('branch') && project.property('branch') == 'master') {
@@ -590,12 +634,29 @@ task dockerUpload(type: Exec) {
     additionalTags.add(dockerBuildVersion.split(/\./)[0..1].join('.'))
   }
 
-  additionalTags.each { tag ->
-    cmd += " && docker tag '${image}' '${imageName}:${tag.trim()}' && docker push '${imageName}:${tag.trim()}'"
-    cmd += " && docker tag '${image}' '${azureImageName}:${tag.trim()}' && docker push '${azureImageName}:${tag.trim()}'"
+  doLast {
+    for (def variant in dockerVariants) {
+      def variantImage = "${image}-${variant}"
+      exec {
+        def cmd = "docker push '${variantImage}'"
+        additionalTags.each { tag ->
+          cmd += " && docker tag '${variantImage}' '${imageName}:${tag.trim()}-${variant}' && docker push '${imageName}:${tag.trim()}-${variant}'"
+        }
+        executable "sh"
+        args "-c", cmd
+      }
+    }
+
+    exec {
+      def cmd = "docker push '${image}'"
+      additionalTags.each { tag ->
+        cmd += " && docker tag '${image}' '${imageName}:${tag.trim()}' && docker push '${imageName}:${tag.trim()}'"
+        cmd += " && docker tag '${image}' '${azureImageName}:${tag.trim()}' && docker push '${azureImageName}:${tag.trim()}'"
+      }
+      executable "sh"
+      args "-c", cmd
+    }
   }
-  executable "sh"
-  args "-c", cmd
 }
 
 task checkSpdxHeader(type: CheckSpdxHeader) {
@@ -604,7 +665,17 @@ task checkSpdxHeader(type: CheckSpdxHeader) {
   rootPath = "${projectDir}"
   spdxHeader = "* SPDX-License-Identifier: Apache-2.0"
   filesRegex = "(.*.java)|(.*.groovy)"
-  excludeRegex = "(.*generalstate/GeneralStateRegressionReferenceTest.*)|(.*generalstate/GeneralStateReferenceTest.*)|(.*blockchain/BlockchainReferenceTest.*)|(.*.gradle/.*)|(.*.idea/.*)"
+  excludeRegex = [
+    "(.*/generalstate/GeneralStateRegressionReferenceTest.*)",
+    "(.*/generalstate/GeneralStateReferenceTest.*)",
+    "(.*/blockchain/BlockchainReferenceTest.*)",
+    "(.*/.gradle/.*)",
+    "(.*/.idea/.*)",
+    "(.*/out/.*)",
+    "(.*/build/.*)",
+    "(.*/src/[^/]+/generated/.*)",
+  ].join("|")
+
 }
 
 task jacocoRootReport(type: org.gradle.testing.jacoco.tasks.JacocoReport) {
