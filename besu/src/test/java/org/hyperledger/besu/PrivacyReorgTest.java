@@ -60,9 +60,9 @@ import org.hyperledger.besu.ethereum.rlp.BytesValueRLPOutput;
 import org.hyperledger.besu.metrics.noop.NoOpMetricsSystem;
 import org.hyperledger.besu.plugin.data.TransactionType;
 import org.hyperledger.besu.testutil.TestClock;
-import org.hyperledger.orion.testutil.OrionKeyConfiguration;
-import org.hyperledger.orion.testutil.OrionTestHarness;
-import org.hyperledger.orion.testutil.OrionTestHarnessFactory;
+import org.hyperledger.enclave.testutil.EnclaveKeyConfiguration;
+import org.hyperledger.enclave.testutil.EnclaveTestHarness;
+import org.hyperledger.enclave.testutil.TesseraTestHarnessFactory;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -133,7 +133,7 @@ public class PrivacyReorgTest {
 
   private final BlockDataGenerator gen = new BlockDataGenerator();
   private BesuController besuController;
-  private OrionTestHarness enclave;
+  private EnclaveTestHarness enclave;
   private PrivateStateRootResolver privateStateRootResolver;
   private PrivacyParameters privacyParameters;
   private DefaultPrivacyController privacyController;
@@ -142,9 +142,9 @@ public class PrivacyReorgTest {
   public void setUp() throws IOException {
     // Start Enclave
     enclave =
-        OrionTestHarnessFactory.create(
-            folder.newFolder().toPath(),
-            new OrionKeyConfiguration("enclavePublicKey", "enclavePrivateKey"));
+        TesseraTestHarnessFactory.create(
+            "tessera", folder.newFolder().toPath(),
+            new EnclaveKeyConfiguration("enclavePublicKey", "enclavePrivateKey"));
     enclave.start();
 
     // Create Storage

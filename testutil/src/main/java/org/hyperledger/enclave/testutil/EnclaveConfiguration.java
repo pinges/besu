@@ -12,13 +12,13 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.hyperledger.orion.testutil;
+package org.hyperledger.enclave.testutil;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-public class OrionConfiguration {
+public class EnclaveConfiguration {
 
   private final Path[] publicKeys;
   private final Path[] privateKeys;
@@ -26,14 +26,15 @@ public class OrionConfiguration {
   private final List<String> otherNodes = new ArrayList<>();
   private final boolean clearKnownNodes;
   private final String storage;
+  private final String name;
 
-  public OrionConfiguration(
-      final Path[] publicKeys,
-      final Path[] privateKeys,
-      final Path tempDir,
-      final List<String> otherNodes,
-      final boolean clearKnownNodes,
-      final String storage) {
+  public EnclaveConfiguration(
+          final String name, final Path[] publicKeys,
+          final Path[] privateKeys,
+          final Path tempDir,
+          final List<String> otherNodes,
+          final boolean clearKnownNodes,
+          final String storage) {
 
     this.publicKeys = publicKeys;
     this.privateKeys = privateKeys;
@@ -41,6 +42,7 @@ public class OrionConfiguration {
     this.otherNodes.addAll(otherNodes);
     this.clearKnownNodes = clearKnownNodes;
     this.storage = storage;
+    this.name = name;
   }
 
   public Path[] getPublicKeys() {
@@ -69,5 +71,9 @@ public class OrionConfiguration {
 
   public String getStorage() {
     return storage;
+  }
+
+  public String getName() {
+    return name;
   }
 }

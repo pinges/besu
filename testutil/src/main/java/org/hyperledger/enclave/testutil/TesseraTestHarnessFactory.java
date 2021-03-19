@@ -12,7 +12,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.hyperledger.orion.testutil;
+package org.hyperledger.enclave.testutil;
 
 import static org.apache.tuweni.io.file.Files.copyResource;
 
@@ -22,19 +22,21 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-public class OrionTestHarnessFactory {
+public class TesseraTestHarnessFactory {
   private static final String storage = "memory";
 
-  public static OrionTestHarness create(
-      final Path tempDir, final OrionKeyConfiguration orionConfig) {
+  public static TesseraTestHarness create(
+      final String name, final Path tempDir, final EnclaveKeyConfiguration enclaveConfig) {
     return create(
+        name,
         tempDir,
-        orionConfig.getPubKeyPaths(),
-        orionConfig.getPrivKeyPaths(),
+        enclaveConfig.getPubKeyPaths(),
+        enclaveConfig.getPrivKeyPaths(),
         Collections.emptyList());
   }
 
-  public static OrionTestHarness create(
+  public static TesseraTestHarness create(
+      final String name,
       final Path tempDir,
       final String[] pubKeyPaths,
       final String[] privKeyPaths,
@@ -62,15 +64,16 @@ public class OrionTestHarnessFactory {
                 })
             .toArray(Path[]::new);
 
-    return create(tempDir, pubKeys, privKeys, othernodes);
+    return create(name, tempDir, pubKeys, privKeys, othernodes);
   }
 
-  public static OrionTestHarness create(
+  public static TesseraTestHarness create(
+      final String name,
       final Path tempDir,
       final Path[] key1pubs,
       final Path[] key1keys,
       final List<String> othernodes) {
-    return new OrionTestHarness(
-        new OrionConfiguration(key1pubs, key1keys, tempDir, othernodes, false, storage));
+    return new TesseraTestHarness(
+        new EnclaveConfiguration(name, key1pubs, key1keys, tempDir, othernodes, false, storage));
   }
 }

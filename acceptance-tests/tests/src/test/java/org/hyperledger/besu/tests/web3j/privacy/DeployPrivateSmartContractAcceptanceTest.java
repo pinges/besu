@@ -39,6 +39,13 @@ public class DeployPrivateSmartContractAcceptanceTest extends PrivacyAcceptanceT
   public void deployingMustGiveValidReceiptAndCode() throws Exception {
     final String contractAddress = "0x89ce396d0f9f937ddfa71113e29b2081c4869555";
 
+//    boolean wahr = true;
+//    do {
+//      if (!wahr) {
+//        wahr = false;
+//      }
+//    } while (wahr);
+
     final EventEmitter eventEmitter =
         minerNode.execute(
             privateContractTransactions.createSmartContract(

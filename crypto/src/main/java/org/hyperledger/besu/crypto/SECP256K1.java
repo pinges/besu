@@ -66,7 +66,7 @@ public class SECP256K1 implements SignatureAlgorithm {
 
   private static final Logger LOG = LogManager.getLogger();
 
-  private boolean useNative = true;
+  private boolean useNative = false;
 
   public static final String CURVE_NAME = "secp256k1";
   public static final String PROVIDER = "BC";

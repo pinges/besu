@@ -41,8 +41,8 @@ import org.hyperledger.besu.tests.acceptance.dsl.node.configuration.NodeConfigur
 import org.hyperledger.besu.tests.acceptance.dsl.node.configuration.privacy.PrivacyNodeConfiguration;
 import org.hyperledger.besu.tests.acceptance.dsl.privacy.condition.PrivateCondition;
 import org.hyperledger.besu.tests.acceptance.dsl.transaction.Transaction;
-import org.hyperledger.orion.testutil.OrionTestHarness;
-import org.hyperledger.orion.testutil.OrionTestHarnessFactory;
+import org.hyperledger.enclave.testutil.EnclaveTestHarness;
+import org.hyperledger.enclave.testutil.TesseraTestHarnessFactory;
 
 import java.io.IOException;
 import java.net.URI;
@@ -66,7 +66,7 @@ public class PrivacyNode implements AutoCloseable {
   private static final int MAX_BACKGROUND_COMPACTIONS = 4;
   private static final int BACKGROUND_THREAD_COUNT = 4;
 
-  private final OrionTestHarness orion;
+  private final EnclaveTestHarness envclave;
   private final BesuNode besu;
   private final Vertx vertx;
   private final boolean isOnchainPrivacyEnabled;
@@ -74,11 +74,13 @@ public class PrivacyNode implements AutoCloseable {
 
   public PrivacyNode(final PrivacyNodeConfiguration privacyConfiguration, final Vertx vertx)
       throws IOException {
-    final Path orionDir = Files.createTempDirectory("acctest-orion");
-    this.orion = OrionTestHarnessFactory.create(orionDir, privacyConfiguration.getOrionKeyConfig());
+    final Path enclaveDir = Files.createTempDirectory("acctest-orion");
+    final BesuNodeConfiguration config = privacyConfiguration.getBesuConfig();
+    this.envclave =
+        TesseraTestHarnessFactory.create(config.getName(), enclaveDir, privacyConfiguration.getKeyConfig());
     this.vertx = vertx;
 
-    final BesuNodeConfiguration besuConfig = privacyConfiguration.getBesuConfig();
+    final BesuNodeConfiguration besuConfig = config;
 
     isOnchainPrivacyEnabled = privacyConfiguration.isOnchainPrivacyGroupEnabled();
     isMultitenancyEnabled = privacyConfiguration.isMultitenancyEnabled();
@@ -111,39 +113,40 @@ public class PrivacyNode implements AutoCloseable {
             List.of());
   }
 
-  public void testOrionConnection(final List<PrivacyNode> otherNodes) {
+  public void testEnclaveConnection(final List<PrivacyNode> otherNodes) {
     LOG.info(
         String.format(
             "Testing Enclave connectivity between %s (%s) and %s (%s)",
             besu.getName(),
-            orion.nodeUrl(),
+            envclave.nodeUrl(),
             Arrays.toString(otherNodes.stream().map(node -> node.besu.getName()).toArray()),
-            Arrays.toString(otherNodes.stream().map(node -> node.orion.nodeUrl()).toArray())));
+            Arrays.toString(otherNodes.stream().map(node -> node.envclave.nodeUrl()).toArray())));
     final EnclaveFactory factory = new EnclaveFactory(vertx);
-    final Enclave enclaveClient = factory.createVertxEnclave(orion.clientUrl());
+    final Enclave enclaveClient = factory.createVertxEnclave(envclave.clientUrl());
     final String payload = "SGVsbG8sIFdvcmxkIQ==";
     final List<String> to =
         otherNodes.stream()
-            .map(node -> node.orion.getDefaultPublicKey())
+            .map(node -> node.envclave.getDefaultPublicKey())
             .collect(Collectors.toList());
 
     Awaitility.await()
         .until(
             () -> {
               try {
-                enclaveClient.send(payload, orion.getDefaultPublicKey(), to);
+                LOG.info("sending from: " + envclave.getDefaultPublicKey() + " to: " + to.get(0));
+                enclaveClient.send(payload, envclave.getDefaultPublicKey(), to);
                 return true;
               } catch (final EnclaveClientException
                   | EnclaveIOException
                   | EnclaveServerException e) {
-                LOG.warn("Waiting for enclave connectivity");
+                LOG.warn("Waiting for enclave connectivity: " + e.getMessage());
                 return false;
               }
             });
   }
 
-  public OrionTestHarness getOrion() {
-    return orion;
+  public EnclaveTestHarness getEnvclave() {
+    return envclave;
   }
 
   public BesuNode getBesu() {
@@ -152,17 +155,17 @@ public class PrivacyNode implements AutoCloseable {
 
   public void stop() {
     besu.stop();
-    orion.stop();
+    envclave.stop();
   }
 
   @Override
   public void close() {
     besu.close();
-    orion.close();
+    envclave.close();
   }
 
   public void start(final BesuNodeRunner runner) {
-    orion.start();
+    envclave.start();
 
     final PrivacyParameters privacyParameters;
 
@@ -173,8 +176,8 @@ public class PrivacyNode implements AutoCloseable {
       privacyParameters =
           new PrivacyParameters.Builder()
               .setEnabled(true)
-              .setEnclaveUrl(orion.clientUrl())
-              .setEnclavePublicKeyUsingFile(orion.getConfig().publicKeys().get(0).toFile())
+              .setEnclaveUrl(envclave.clientUrl())
+              .setEnclavePublicKeyUsingFile(envclave.getPublicKeyPaths().get(0).toFile())
               .setStorageProvider(createKeyValueStorageProvider(dataDir, dbDir))
               .setPrivateKeyPath(KeyPairUtil.getDefaultKeyFile(besu.homeDirectory()).toPath())
               .setEnclaveFactory(new EnclaveFactory(vertx))
@@ -217,7 +220,7 @@ public class PrivacyNode implements AutoCloseable {
   }
 
   public String getEnclaveKey() {
-    return orion.getDefaultPublicKey();
+    return envclave.getDefaultPublicKey();
   }
 
   public String getTransactionSigningKey() {
@@ -225,7 +228,7 @@ public class PrivacyNode implements AutoCloseable {
   }
 
   public void addOtherEnclaveNode(final URI otherNode) {
-    orion.addOtherNode(otherNode);
+    envclave.addOtherNode(otherNode);
   }
 
   public NodeConfiguration getConfiguration() {

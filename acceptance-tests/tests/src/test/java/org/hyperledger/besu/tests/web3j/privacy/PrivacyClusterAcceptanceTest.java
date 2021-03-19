@@ -156,12 +156,12 @@ public class PrivacyClusterAcceptanceTest extends PrivacyAcceptanceTestBase {
     final String transactionKey =
         alice.execute(privacyTransactions.privDistributeTransaction(signedPrivateTransaction));
 
-    final Enclave aliceEnclave = enclaveFactory.createVertxEnclave(alice.getOrion().clientUrl());
+    final Enclave aliceEnclave = enclaveFactory.createVertxEnclave(alice.getEnvclave().clientUrl());
     final ReceiveResponse aliceRR =
         aliceEnclave.receive(
             Bytes.fromHexString(transactionKey).toBase64String(), alice.getEnclaveKey());
 
-    final Enclave bobEnclave = enclaveFactory.createVertxEnclave(bob.getOrion().clientUrl());
+    final Enclave bobEnclave = enclaveFactory.createVertxEnclave(bob.getEnvclave().clientUrl());
     final ReceiveResponse bobRR =
         bobEnclave.receive(
             Bytes.fromHexString(transactionKey).toBase64String(), bob.getEnclaveKey());

@@ -70,9 +70,9 @@ public class OnChainMultiTenancyAcceptanceTest extends OnChainPrivacyAcceptanceT
         aliceBesu.execute(permissioningTransactions.createSuccessfulLogin("user3", "Password3"));
     privacyCluster.awaitPeerCount(alice);
 
-    final String alice1EnclaveKey = alice.getOrion().getPublicKeys().get(0);
-    final String alice2EnclaveKey = alice.getOrion().getPublicKeys().get(1);
-    final String alice3EnclaveKey = alice.getOrion().getPublicKeys().get(2);
+    final String alice1EnclaveKey = alice.getEnvclave().getPublicKeys().get(0);
+    final String alice2EnclaveKey = alice.getEnvclave().getPublicKeys().get(1);
+    final String alice3EnclaveKey = alice.getEnvclave().getPublicKeys().get(2);
 
     aliceMultiTenancyPrivacyNode = new MultiTenancyPrivacyNode(alice);
     aliceMultiTenancyPrivacyNode

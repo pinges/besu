@@ -51,8 +51,11 @@ dependencies {
   testImplementation 'org.apache.tuweni:crypto'
   testImplementation 'org.assertj:assertj-core'
   testImplementation 'org.awaitility:awaitility'
+  testImplementation 'org.eclipse.persistence:eclipselink'
   testImplementation 'org.web3j:abi'
   testImplementation 'org.web3j:besu'
+  testImplementation 'tech.pegasys.ethsigner.internal:core'
+  testImplementation 'tech.pegasys.ethsigner.internal:file-based'
 }
 
 test.enabled = false

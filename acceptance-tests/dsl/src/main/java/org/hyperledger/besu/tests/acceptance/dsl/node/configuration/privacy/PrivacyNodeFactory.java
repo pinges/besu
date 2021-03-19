@@ -20,7 +20,7 @@ import org.hyperledger.besu.tests.acceptance.dsl.node.configuration.NodeConfigur
 import org.hyperledger.besu.tests.acceptance.dsl.node.configuration.genesis.GenesisConfigurationFactory;
 import org.hyperledger.besu.tests.acceptance.dsl.privacy.PrivacyNode;
 import org.hyperledger.besu.tests.acceptance.dsl.privacy.account.PrivacyAccount;
-import org.hyperledger.orion.testutil.OrionKeyConfiguration;
+import org.hyperledger.enclave.testutil.EnclaveKeyConfiguration;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -60,7 +60,7 @@ public class PrivacyNodeFactory {
                 .enablePrivateTransactions()
                 .keyFilePath(privacyAccount.getPrivateKeyPath())
                 .build(),
-            new OrionKeyConfiguration(
+            new EnclaveKeyConfiguration(
                 privacyAccount.getEnclaveKeyPaths(), privacyAccount.getEnclavePrivateKeyPaths())));
   }
 
@@ -82,7 +82,7 @@ public class PrivacyNodeFactory {
                 .enablePrivateTransactions()
                 .webSocketEnabled()
                 .build(),
-            new OrionKeyConfiguration(
+            new EnclaveKeyConfiguration(
                 privacyAccount.getEnclaveKeyPaths(), privacyAccount.getEnclavePrivateKeyPaths())));
   }
 
@@ -115,7 +115,7 @@ public class PrivacyNodeFactory {
                 .keyFilePath(privacyAccount.getPrivateKeyPath())
                 .enablePrivateTransactions()
                 .build(),
-            new OrionKeyConfiguration(
+            new EnclaveKeyConfiguration(
                 privacyAccount.getEnclaveKeyPaths(), privacyAccount.getEnclavePrivateKeyPaths())));
   }
 
@@ -144,7 +144,7 @@ public class PrivacyNodeFactory {
                 .enablePrivateTransactions()
                 .keyFilePath(privacyAccount.getPrivateKeyPath())
                 .build(),
-            new OrionKeyConfiguration(
+            new EnclaveKeyConfiguration(
                 privacyAccount.getEnclaveKeyPaths(), privacyAccount.getEnclavePrivateKeyPaths())));
   }
 
@@ -166,7 +166,7 @@ public class PrivacyNodeFactory {
                 .enablePrivateTransactions()
                 .webSocketEnabled()
                 .build(),
-            new OrionKeyConfiguration(
+            new EnclaveKeyConfiguration(
                 privacyAccount.getEnclaveKeyPaths(), privacyAccount.getEnclavePrivateKeyPaths())));
   }
 }

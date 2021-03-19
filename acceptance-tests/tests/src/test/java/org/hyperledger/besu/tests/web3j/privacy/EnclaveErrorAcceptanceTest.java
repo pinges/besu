@@ -116,7 +116,7 @@ public class EnclaveErrorAcceptanceTest extends PrivacyAcceptanceTestBase {
         privateTransactionVerifier.validPrivateTransactionReceipt(
             transactionHash, receiptBeforeEnclaveLosesConnection));
 
-    alice.getOrion().stop();
+    alice.getEnvclave().stop();
 
     alice.verify(
         privateTransactionVerifier.internalErrorPrivateTransactionReceipt(transactionHash));
@@ -141,7 +141,7 @@ public class EnclaveErrorAcceptanceTest extends PrivacyAcceptanceTestBase {
         .validPrivateContractDeployed(contractAddress, alice.getAddress().toString())
         .verify(eventEmitter);
 
-    bob.getOrion().stop();
+    bob.getEnvclave().stop();
 
     final Throwable throwable =
         catchThrowable(

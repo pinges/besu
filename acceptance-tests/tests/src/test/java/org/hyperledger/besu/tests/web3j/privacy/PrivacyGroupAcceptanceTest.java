@@ -16,6 +16,11 @@ package org.hyperledger.besu.tests.web3j.privacy;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.config.Configuration;
+import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.hyperledger.besu.tests.acceptance.dsl.privacy.PrivacyAcceptanceTestBase;
 import org.hyperledger.besu.tests.acceptance.dsl.privacy.PrivacyNode;
 import org.hyperledger.besu.tests.web3j.generated.EventEmitter;
@@ -48,6 +53,12 @@ public class PrivacyGroupAcceptanceTest extends PrivacyAcceptanceTestBase {
 
   @Test
   public void nodeCanCreatePrivacyGroup() {
+
+    final LoggerContext ctx = (LoggerContext) LogManager.getContext(false);
+    final Configuration config = ctx.getConfiguration();
+    final LoggerConfig loggerConfig = config.getLoggerConfig(LogManager.ROOT_LOGGER_NAME);
+    loggerConfig.setLevel(Level.DEBUG);
+    ctx.updateLoggers();
     final String privacyGroupId =
         alice.execute(
             privacyTransactions.createPrivacyGroup(
@@ -112,7 +123,9 @@ public class PrivacyGroupAcceptanceTest extends PrivacyAcceptanceTestBase {
   @Test
   public void nodeCanCreatePrivacyGroupWithoutOptionalParams() {
     final String privacyGroupId =
-        alice.execute(privacyTransactions.createPrivacyGroup(null, null, alice, bob));
+        alice.execute(privacyTransactions.createPrivacyGroup(null, null, alice));
+
+    System.out.println("PrivacyGroup: " + privacyGroupId);
 
     assertThat(privacyGroupId).isNotNull();
 
@@ -122,11 +135,12 @@ public class PrivacyGroupAcceptanceTest extends PrivacyAcceptanceTestBase {
             PrivacyGroup.Type.PANTHEON,
             "",
             "",
-            Base64String.wrapList(alice.getEnclaveKey(), bob.getEnclaveKey()));
+                Base64String.wrapList(alice.getEnclaveKey()));
+//    Base64String.wrapList(alice.getEnclaveKey(), bob.getEnclaveKey()));
 
     alice.verify(privateTransactionVerifier.validPrivacyGroupCreated(expected));
 
-    bob.verify(privateTransactionVerifier.validPrivacyGroupCreated(expected));
+//    bob.verify(privateTransactionVerifier.validPrivacyGroupCreated(expected));
   }
 
   @Test

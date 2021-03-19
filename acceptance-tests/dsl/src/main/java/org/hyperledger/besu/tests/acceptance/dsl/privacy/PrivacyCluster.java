@@ -80,7 +80,7 @@ public class PrivacyCluster {
       node.awaitPeerDiscovery(net.awaitPeerCount(nodes.size() - 1));
     }
 
-    verifyAllOrionNetworkConnections();
+    verifyAllEnclaveNetworkConnections();
   }
 
   public List<PrivacyNode> getNodes() {
@@ -88,9 +88,9 @@ public class PrivacyCluster {
   }
 
   /** Verify that each Orion node has connected to every other Orion */
-  public void verifyAllOrionNetworkConnections() {
+  public void verifyAllEnclaveNetworkConnections() {
     for (int i = 0; i < nodes.size() - 1; i++) {
-      nodes.get(i).testOrionConnection(nodes.subList(i + 1, nodes.size()));
+      nodes.get(i).testEnclaveConnection(nodes.subList(i + 1, nodes.size()));
     }
   }
 
@@ -101,7 +101,7 @@ public class PrivacyCluster {
   }
 
   public void stopNode(final PrivacyNode node) {
-    node.getOrion().stop();
+    node.getEnvclave().stop();
     besuNodeRunner.stopNode(node.getBesu());
   }
 
@@ -145,7 +145,7 @@ public class PrivacyCluster {
         .ifPresent(node.getConfiguration()::setGenesisConfig);
 
     if (!isBootNode) {
-      node.addOtherEnclaveNode(bootNode.getOrion().nodeUrl());
+      node.addOtherEnclaveNode(bootNode.getEnvclave().nodeUrl());
     }
 
     LOG.info(

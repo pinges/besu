@@ -23,8 +23,13 @@ import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.http.HttpClientResponse;
 import io.vertx.core.http.HttpHeaders;
 import io.vertx.core.http.HttpMethod;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.hyperledger.besu.plugin.data.Log;
 
 public class VertxRequestTransmitter implements RequestTransmitter {
+
+  private static final Logger LOG = LogManager.getLogger();
 
   private final HttpClient client;
   private static final long REQUEST_TIMEOUT_MS = 5000L;
@@ -73,6 +78,7 @@ public class VertxRequestTransmitter implements RequestTransmitter {
               .exceptionHandler(result::completeExceptionally)
               .setChunked(false);
       contentType.ifPresent(ct -> request.putHeader(HttpHeaders.CONTENT_TYPE, ct));
+      LOG.info("Sending this request: " + request.absoluteURI() + request.method() + content.get());
       if (content.isPresent()) {
         request.end(content.get());
       } else {

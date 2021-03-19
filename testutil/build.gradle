@@ -42,4 +42,6 @@ dependencies {
   implementation 'org.assertj:assertj-core'
   implementation 'org.mockito:mockito-core'
   implementation 'org.web3j:core'
+
+  implementation files("/Users/stefanpingel/workspace/tessera/tessera-dist/tessera-app/target/tessera-app-21.1.1-SNAPSHOT-app.jar")
 }
