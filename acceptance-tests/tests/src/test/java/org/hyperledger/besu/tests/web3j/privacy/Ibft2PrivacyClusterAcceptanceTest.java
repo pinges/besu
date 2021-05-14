@@ -14,43 +14,65 @@
  */
 package org.hyperledger.besu.tests.web3j.privacy;
 
+import static org.web3j.utils.Restriction.UNRESTRICTED;
+
 import org.hyperledger.besu.tests.acceptance.dsl.privacy.ParameterizedEnclaveTestBase;
 import org.hyperledger.besu.tests.acceptance.dsl.privacy.PrivacyNode;
 import org.hyperledger.besu.tests.web3j.generated.EventEmitter;
 import org.hyperledger.enclave.testutil.EnclaveType;
 
+import java.io.IOException;
 import java.math.BigInteger;
 import java.util.Optional;
 
-import org.junit.Before;
 import org.junit.Test;
 import org.testcontainers.containers.Network;
 import org.web3j.protocol.besu.response.privacy.PrivateTransactionReceipt;
+import org.web3j.utils.Restriction;
 
 public class Ibft2PrivacyClusterAcceptanceTest extends ParameterizedEnclaveTestBase {
-  public Ibft2PrivacyClusterAcceptanceTest(final EnclaveType enclaveType) {
-    super(enclaveType);
-  }
-
   private static final long IBFT2_CHAIN_ID = 4;
 
-  private PrivacyNode alice;
-  private PrivacyNode bob;
-  private PrivacyNode charlie;
+  private final PrivacyNode alice;
+  private final PrivacyNode bob;
+  private final PrivacyNode charlie;
 
-  @Before
-  public void setUp() throws Exception {
+  public Ibft2PrivacyClusterAcceptanceTest(
+      final Restriction restriction, final EnclaveType enclaveType) throws IOException {
+    super(restriction, enclaveType);
+
     final Network containerNetwork = Network.newNetwork();
 
     alice =
         privacyBesu.createIbft2NodePrivacyEnabled(
-            "node1", privacyAccountResolver.resolve(0), enclaveType, Optional.of(containerNetwork));
+            "node1",
+            privacyAccountResolver.resolve(0),
+            false,
+            enclaveType,
+            Optional.of(containerNetwork),
+            false,
+            false,
+            restriction == UNRESTRICTED);
     bob =
         privacyBesu.createIbft2NodePrivacyEnabled(
-            "node2", privacyAccountResolver.resolve(1), enclaveType, Optional.of(containerNetwork));
+            "node2",
+            privacyAccountResolver.resolve(1),
+            false,
+            enclaveType,
+            Optional.of(containerNetwork),
+            false,
+            false,
+            restriction == UNRESTRICTED);
     charlie =
         privacyBesu.createIbft2NodePrivacyEnabled(
-            "node3", privacyAccountResolver.resolve(2), enclaveType, Optional.of(containerNetwork));
+            "node3",
+            privacyAccountResolver.resolve(2),
+            false,
+            enclaveType,
+            Optional.of(containerNetwork),
+            false,
+            false,
+            restriction == UNRESTRICTED);
     privacyCluster.start(alice, bob, charlie);
   }
 
@@ -65,6 +87,7 @@ public class Ibft2PrivacyClusterAcceptanceTest extends ParameterizedEnclaveTestB
                 EventEmitter.class,
                 alice.getTransactionSigningKey(),
                 IBFT2_CHAIN_ID,
+                restriction,
                 alice.getEnclaveKey(),
                 bob.getEnclaveKey()));
 
@@ -79,6 +102,7 @@ public class Ibft2PrivacyClusterAcceptanceTest extends ParameterizedEnclaveTestB
                 eventEmitter.store(BigInteger.ONE).encodeFunctionCall(),
                 alice.getTransactionSigningKey(),
                 IBFT2_CHAIN_ID,
+                restriction,
                 alice.getEnclaveKey(),
                 bob.getEnclaveKey()));
 
@@ -88,7 +112,10 @@ public class Ibft2PrivacyClusterAcceptanceTest extends ParameterizedEnclaveTestB
     bob.verify(
         privateTransactionVerifier.validPrivateTransactionReceipt(
             transactionHash, expectedReceipt));
-    charlie.verify(privateTransactionVerifier.noPrivateTransactionReceipt(transactionHash));
+
+    if (restriction != UNRESTRICTED) {
+      charlie.verify(privateTransactionVerifier.noPrivateTransactionReceipt(transactionHash));
+    }
   }
 
   @Test
@@ -103,6 +130,7 @@ public class Ibft2PrivacyClusterAcceptanceTest extends ParameterizedEnclaveTestB
                 EventEmitter.class,
                 alice.getTransactionSigningKey(),
                 IBFT2_CHAIN_ID,
+                restriction,
                 alice.getEnclaveKey(),
                 bob.getEnclaveKey()));
 
@@ -118,6 +146,7 @@ public class Ibft2PrivacyClusterAcceptanceTest extends ParameterizedEnclaveTestB
                 EventEmitter.class,
                 alice.getTransactionSigningKey(),
                 IBFT2_CHAIN_ID,
+                restriction,
                 alice.getEnclaveKey(),
                 bob.getEnclaveKey()));
 
@@ -137,6 +166,7 @@ public class Ibft2PrivacyClusterAcceptanceTest extends ParameterizedEnclaveTestB
                 EventEmitter.class,
                 alice.getTransactionSigningKey(),
                 IBFT2_CHAIN_ID,
+                restriction,
                 alice.getEnclaveKey(),
                 bob.getEnclaveKey(),
                 charlie.getEnclaveKey()));
@@ -153,6 +183,7 @@ public class Ibft2PrivacyClusterAcceptanceTest extends ParameterizedEnclaveTestB
                 firstEventEmitter.store(BigInteger.ONE).encodeFunctionCall(),
                 charlie.getTransactionSigningKey(),
                 IBFT2_CHAIN_ID,
+                restriction,
                 charlie.getEnclaveKey(),
                 alice.getEnclaveKey(),
                 bob.getEnclaveKey()));
@@ -178,6 +209,7 @@ public class Ibft2PrivacyClusterAcceptanceTest extends ParameterizedEnclaveTestB
                 EventEmitter.class,
                 alice.getTransactionSigningKey(),
                 IBFT2_CHAIN_ID,
+                restriction,
                 alice.getEnclaveKey(),
                 bob.getEnclaveKey()));
 
@@ -193,6 +225,7 @@ public class Ibft2PrivacyClusterAcceptanceTest extends ParameterizedEnclaveTestB
                 secondEventEmitter.store(BigInteger.ONE).encodeFunctionCall(),
                 bob.getTransactionSigningKey(),
                 IBFT2_CHAIN_ID,
+                restriction,
                 bob.getEnclaveKey(),
                 alice.getEnclaveKey()));
 
@@ -205,6 +238,8 @@ public class Ibft2PrivacyClusterAcceptanceTest extends ParameterizedEnclaveTestB
             secondTransactionHash, secondExpectedReceipt));
 
     // charlie cannot see the receipt
-    charlie.verify(privateTransactionVerifier.noPrivateTransactionReceipt(secondTransactionHash));
+    if (restriction != UNRESTRICTED) {
+      charlie.verify(privateTransactionVerifier.noPrivateTransactionReceipt(secondTransactionHash));
+    }
   }
 }
