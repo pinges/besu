@@ -144,7 +144,7 @@ public class PrivacyApiGroupJsonRpcMethodsTest {
     final JsonRpcResponse response = privMethod.response(request);
     assertThat(response.getType()).isEqualTo(JsonRpcResponseType.ERROR);
 
-    JsonRpcErrorResponse errorResponse = (JsonRpcErrorResponse) response;
+    final JsonRpcErrorResponse errorResponse = (JsonRpcErrorResponse) response;
     assertThat(errorResponse.getError()).isEqualTo(PRIVACY_NOT_ENABLED);
   }
 

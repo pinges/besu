@@ -14,29 +14,39 @@
  */
 package org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods;
 
+import org.hyperledger.besu.config.GoQuorumOptions;
+import org.hyperledger.besu.enclave.GoQuorumEnclave;
 import org.hyperledger.besu.ethereum.api.jsonrpc.RpcMethod;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcError;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.AbstractTransactionsPendingOrCompleteResult;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.TransactionCompleteResult;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.TransactionPendingResult;
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.core.Hash;
+import org.hyperledger.besu.ethereum.core.PrivacyParameters;
 import org.hyperledger.besu.ethereum.eth.transactions.PendingTransactions;
 
 import java.util.Optional;
 
-public class EthGetTransactionByHash implements JsonRpcMethod {
+public class EthGetTransactionByHash implements JsonRpcMethod, GoQuorumPrivatePayloadRetriever {
 
   private final BlockchainQueries blockchain;
   private final PendingTransactions pendingTransactions;
+  private GoQuorumEnclave enclave = null;
 
   public EthGetTransactionByHash(
-      final BlockchainQueries blockchain, final PendingTransactions pendingTransactions) {
+      final BlockchainQueries blockchain,
+      final PendingTransactions pendingTransactions,
+      final PrivacyParameters privacyParameters) {
     this.blockchain = blockchain;
     this.pendingTransactions = pendingTransactions;
+    if (GoQuorumOptions.goQuorumCompatibilityMode) {
+      this.enclave = privacyParameters.getGoQuorumPrivacyParameters().orElseThrow().enclave();
+    }
   }
 
   @Override
@@ -57,9 +67,15 @@ public class EthGetTransactionByHash implements JsonRpcMethod {
   }
 
   private Object getResult(final Hash hash) {
-    final Optional<Object> transactionPendingResult =
+    final AbstractTransactionsPendingOrCompleteResult transactionResult;
+    final Optional<TransactionPendingResult> transactionPendingResult =
         pendingTransactions.getTransactionByHash(hash).map(TransactionPendingResult::new);
-    return transactionPendingResult.orElseGet(
-        () -> blockchain.transactionByHash(hash).map(TransactionCompleteResult::new).orElse(null));
+    if (transactionPendingResult.isPresent()) {
+      transactionResult = transactionPendingResult.get();
+    } else {
+      transactionResult =
+          blockchain.transactionByHash(hash).map(TransactionCompleteResult::new).orElse(null);
+    }
+    return retrievePrivatePayloadIfNecessary(transactionResult, enclave);
   }
 }

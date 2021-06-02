@@ -648,7 +648,8 @@ public class RunnerBuilder {
       createPrivateTransactionObserver(subscriptionManager, privacyParameters);
     }
 
-    Optional<MetricsService> metricsService = createMetricsService(vertx, metricsConfiguration);
+    final Optional<MetricsService> metricsService =
+        createMetricsService(vertx, metricsConfiguration);
 
     final Optional<EthStatsService> ethStatsService;
     if (!Strings.isNullOrEmpty(ethstatsUrl)) {

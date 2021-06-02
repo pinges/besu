@@ -50,7 +50,7 @@ import org.apache.tuweni.bytes.Bytes;
   "r",
   "s"
 })
-public class TransactionCompleteResult implements TransactionResult {
+public class TransactionCompleteResult extends AbstractTransactionsPendingOrCompleteResult {
 
   @JsonInclude(JsonInclude.Include.NON_NULL)
   private final List<AccessListEntry> accessList;
@@ -74,7 +74,7 @@ public class TransactionCompleteResult implements TransactionResult {
   private final String maxFeePerGas;
 
   private final String hash;
-  private final String input;
+  private String input;
   private final String nonce;
   private final String publicKey;
   private final String raw;
@@ -171,6 +171,7 @@ public class TransactionCompleteResult implements TransactionResult {
   }
 
   @JsonGetter(value = "input")
+  @Override
   public String getInput() {
     return input;
   }
@@ -211,8 +212,14 @@ public class TransactionCompleteResult implements TransactionResult {
   }
 
   @JsonGetter(value = "v")
+  @Override
   public String getV() {
     return v;
+  }
+
+  @Override
+  public void setInput(final byte[] input) {
+    this.input = Bytes.wrap(input).toHexString();
   }
 
   @JsonGetter(value = "r")

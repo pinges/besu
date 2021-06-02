@@ -93,7 +93,7 @@ public abstract class PrivacyApiGroupJsonRpcMethods extends ApiGroupJsonRpcMetho
         createPrivateMarkerTransactionFactory(
             privacyParameters, blockchainQueries, transactionPool.getPendingTransactions());
     final EnclavePublicKeyProvider enclavePublicProvider =
-        EnclavePublicKeyProvider.build(privacyParameters);
+        EnclavePublicKeyProvider.Provider.get(privacyParameters);
     final PrivacyController privacyController = createPrivacyController(markerTransactionFactory);
     return create(privacyController, enclavePublicProvider).entrySet().stream()
         .collect(

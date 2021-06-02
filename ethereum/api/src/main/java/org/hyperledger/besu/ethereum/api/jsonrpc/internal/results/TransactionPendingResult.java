@@ -25,6 +25,7 @@ import java.util.List;
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import org.apache.tuweni.bytes.Bytes;
 
 @JsonPropertyOrder({
   "blockHash",
@@ -44,7 +45,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
   "r",
   "s"
 })
-public class TransactionPendingResult implements TransactionResult {
+public class TransactionPendingResult extends AbstractTransactionsPendingOrCompleteResult {
 
   @JsonInclude(JsonInclude.Include.NON_NULL)
   private final List<AccessListEntry> accessList;
@@ -63,7 +64,7 @@ public class TransactionPendingResult implements TransactionResult {
   private final String maxFeePerGas;
 
   private final String hash;
-  private final String input;
+  private String input;
   private final String nonce;
   private final String publicKey;
   private final String raw;
@@ -146,6 +147,7 @@ public class TransactionPendingResult implements TransactionResult {
   }
 
   @JsonGetter(value = "input")
+  @Override
   public String getInput() {
     return input;
   }
@@ -181,8 +183,14 @@ public class TransactionPendingResult implements TransactionResult {
   }
 
   @JsonGetter(value = "v")
+  @Override
   public String getV() {
     return v;
+  }
+
+  @Override
+  public void setInput(final byte[] input) {
+    this.input = Bytes.wrap(input).toHexString();
   }
 
   @JsonGetter(value = "r")

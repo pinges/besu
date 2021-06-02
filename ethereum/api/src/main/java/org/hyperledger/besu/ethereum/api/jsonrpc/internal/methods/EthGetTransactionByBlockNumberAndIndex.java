@@ -14,6 +14,8 @@
  */
 package org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods;
 
+import org.hyperledger.besu.config.GoQuorumOptions;
+import org.hyperledger.besu.enclave.GoQuorumEnclave;
 import org.hyperledger.besu.ethereum.api.jsonrpc.RpcMethod;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.BlockParameter;
@@ -21,13 +23,21 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.UnsignedInt
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.TransactionCompleteResult;
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.api.query.TransactionWithMetadata;
+import org.hyperledger.besu.ethereum.core.PrivacyParameters;
 
 import java.util.Optional;
 
-public class EthGetTransactionByBlockNumberAndIndex extends AbstractBlockParameterMethod {
+public class EthGetTransactionByBlockNumberAndIndex extends AbstractBlockParameterMethod
+    implements GoQuorumPrivatePayloadRetriever {
 
-  public EthGetTransactionByBlockNumberAndIndex(final BlockchainQueries blockchain) {
+  private GoQuorumEnclave enclave = null;
+
+  public EthGetTransactionByBlockNumberAndIndex(
+      final BlockchainQueries blockchain, final PrivacyParameters privacyParameters) {
     super(blockchain);
+    if (GoQuorumOptions.goQuorumCompatibilityMode) {
+      this.enclave = privacyParameters.getGoQuorumPrivacyParameters().orElseThrow().enclave();
+    }
   }
 
   @Override
@@ -46,6 +56,8 @@ public class EthGetTransactionByBlockNumberAndIndex extends AbstractBlockParamet
     final int index = request.getRequiredParameter(1, UnsignedIntParameter.class).getValue();
     final Optional<TransactionWithMetadata> transactionWithMetadata =
         getBlockchainQueries().transactionByBlockNumberAndIndex(blockNumber, index);
-    return transactionWithMetadata.map(TransactionCompleteResult::new).orElse(null);
+    final TransactionCompleteResult transactionCompleteResult =
+        transactionWithMetadata.map(TransactionCompleteResult::new).orElse(null);
+    return retrievePrivatePayloadIfNecessary(transactionCompleteResult, enclave);
   }
 }

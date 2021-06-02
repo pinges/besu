@@ -39,9 +39,12 @@ import org.web3j.abi.datatypes.Event;
 import org.web3j.abi.datatypes.generated.Int256;
 import org.web3j.crypto.CipherException;
 import org.web3j.crypto.Credentials;
+import org.web3j.protocol.core.DefaultBlockParameter;
 import org.web3j.protocol.core.DefaultBlockParameterName;
 import org.web3j.protocol.core.methods.request.EthFilter;
 import org.web3j.protocol.core.methods.response.EthLog;
+import org.web3j.protocol.core.methods.response.EthTransaction;
+import org.web3j.protocol.core.methods.response.Transaction;
 import org.web3j.protocol.exceptions.TransactionException;
 import org.web3j.quorum.enclave.Enclave;
 import org.web3j.quorum.enclave.Tessera;
@@ -120,6 +123,12 @@ public class ContainerTests extends ContainerTestBase {
 
     assertThat(besuResult).isEqualTo(logValue);
     assertThat(goQuorumResult).isEqualTo(logValue);
+
+    final Transaction besuTransaction = besuWeb3j.ethGetTransactionByHash(transactionHash).send().getTransaction().get();
+    final Transaction quorumTransaction = goQuorumWeb3j.ethGetTransactionByHash(transactionHash).send().getTransaction().get();
+
+    assertThat(besuTransaction).usingRecursiveComparison().ignoringFields("publicKey", "raw").isEqualTo(quorumTransaction); // TODO: GoQuorum is returning null for publicKey and raw. Do we have to match that?
+
   }
 
   @Test
@@ -265,5 +274,18 @@ public class ContainerTests extends ContainerTestBase {
     assertThat(logs.size()).isEqualTo(1);
     assertThat(logs.toString()).contains(transactionHash);
     assertThat(logs.toString()).contains(logValue);
+
+    // check getTransaction RPCs
+    final Transaction besuTransaction = besuWeb3j.ethGetTransactionByHash(transactionHash).send().getTransaction().get();
+    final Transaction quorumTransaction = goQuorumWeb3j.ethGetTransactionByHash(transactionHash).send().getTransaction().get();
+
+    assertThat(besuTransaction).usingRecursiveComparison().ignoringFields("input", "publicKey", "raw").isEqualTo(quorumTransaction); // TODO: GoQuorum is returning null for publicKey and raw. Do we have to match that?
+    assertThat(besuTransaction.getInput()).isNotEqualTo(quorumTransaction.getInput());
+
+    final Transaction besuTransaction2 = besuWeb3j.ethGetTransactionByBlockHashAndIndex(besuTransaction.getBlockHash(), besuTransaction.getTransactionIndex()).send().getTransaction().get();
+    final Transaction besuTransaction3 = besuWeb3j.ethGetTransactionByBlockNumberAndIndex(DefaultBlockParameter.valueOf(besuTransaction.getBlockNumber()), besuTransaction.getTransactionIndex()).send().getTransaction().get();
+
+    assertThat(besuTransaction).isEqualTo(besuTransaction2);
+    assertThat(besuTransaction).isEqualTo(besuTransaction3);
   }
 }

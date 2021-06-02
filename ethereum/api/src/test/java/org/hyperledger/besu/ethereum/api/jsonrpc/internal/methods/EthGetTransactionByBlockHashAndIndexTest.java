@@ -38,7 +38,7 @@ public class EthGetTransactionByBlockHashAndIndexTest {
 
   @Test
   public void shouldReturnNullWhenBlockHashDoesNotExist() {
-    method = new EthGetTransactionByBlockHashAndIndex(blockchain);
+    method = new EthGetTransactionByBlockHashAndIndex(blockchain, null);
     final Bytes32 hash = Hash.keccak256(Bytes.wrap("horse".getBytes(UTF_8)));
     final JsonRpcSuccessResponse response =
         (JsonRpcSuccessResponse) method.response(request(hash, 1));

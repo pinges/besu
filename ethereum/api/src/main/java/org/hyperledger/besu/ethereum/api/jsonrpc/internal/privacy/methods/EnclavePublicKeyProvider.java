@@ -28,28 +28,19 @@ public interface EnclavePublicKeyProvider {
 
   String getEnclaveKey(Optional<User> user);
 
-  static EnclavePublicKeyProvider build(final PrivacyParameters privacyParameters) {
-    if (privacyParameters.getGoQuorumPrivacyParameters().isPresent()) {
-      return goQuorumEnclavePublicKeyProvider(privacyParameters);
-    } else if (privacyParameters.isMultiTenancyEnabled()) {
-      return multiTenancyEnclavePublicKeyProvider();
-    }
-    return defaultEnclavePublicKeyProvider(privacyParameters);
-  }
-
-  private static EnclavePublicKeyProvider multiTenancyEnclavePublicKeyProvider() {
+  static EnclavePublicKeyProvider multiTenancyEnclavePublicKeyProvider() {
     return user ->
         enclavePublicKey(user)
             .orElseThrow(
                 () -> new IllegalStateException("Request does not contain an authorization token"));
   }
 
-  private static EnclavePublicKeyProvider defaultEnclavePublicKeyProvider(
+  static EnclavePublicKeyProvider defaultEnclavePublicKeyProvider(
       final PrivacyParameters privacyParameters) {
     return user -> privacyParameters.getEnclavePublicKey();
   }
 
-  private static EnclavePublicKeyProvider goQuorumEnclavePublicKeyProvider(
+  static EnclavePublicKeyProvider goQuorumEnclavePublicKeyProvider(
       final PrivacyParameters privacyParameters) {
     return user ->
         privacyParameters
@@ -57,5 +48,25 @@ public interface EnclavePublicKeyProvider {
             .orElseThrow(
                 () -> new InvalidConfigurationException("GoQuorumPrivacyParameters not set"))
             .enclaveKey();
+  }
+
+  class Provider {
+
+    static EnclavePublicKeyProvider enclavePublicKeyProvider = null;
+
+    public static EnclavePublicKeyProvider get(final PrivacyParameters privacyParameters) {
+      synchronized (Provider.class) {
+        if (enclavePublicKeyProvider == null) {
+          if (privacyParameters.getGoQuorumPrivacyParameters().isPresent())
+            enclavePublicKeyProvider = goQuorumEnclavePublicKeyProvider(privacyParameters);
+          else if (privacyParameters.isMultiTenancyEnabled()) {
+            enclavePublicKeyProvider = multiTenancyEnclavePublicKeyProvider();
+          } else {
+            enclavePublicKeyProvider = defaultEnclavePublicKeyProvider(privacyParameters);
+          }
+        }
+      }
+      return enclavePublicKeyProvider;
+    }
   }
 }

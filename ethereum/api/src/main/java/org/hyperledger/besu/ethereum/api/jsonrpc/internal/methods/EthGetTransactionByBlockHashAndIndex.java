@@ -14,6 +14,8 @@
  */
 package org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods;
 
+import org.hyperledger.besu.config.GoQuorumOptions;
+import org.hyperledger.besu.enclave.GoQuorumEnclave;
 import org.hyperledger.besu.ethereum.api.jsonrpc.RpcMethod;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.UnsignedIntParameter;
@@ -24,15 +26,22 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.TransactionRes
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.api.query.TransactionWithMetadata;
 import org.hyperledger.besu.ethereum.core.Hash;
+import org.hyperledger.besu.ethereum.core.PrivacyParameters;
 
 import java.util.Optional;
 
-public class EthGetTransactionByBlockHashAndIndex implements JsonRpcMethod {
+public class EthGetTransactionByBlockHashAndIndex
+    implements JsonRpcMethod, GoQuorumPrivatePayloadRetriever {
 
   private final BlockchainQueries blockchain;
+  private GoQuorumEnclave enclave = null;
 
-  public EthGetTransactionByBlockHashAndIndex(final BlockchainQueries blockchain) {
+  public EthGetTransactionByBlockHashAndIndex(
+      final BlockchainQueries blockchain, final PrivacyParameters privacyParameters) {
     this.blockchain = blockchain;
+    if (GoQuorumOptions.goQuorumCompatibilityMode) {
+      this.enclave = privacyParameters.getGoQuorumPrivacyParameters().orElseThrow().enclave();
+    }
   }
 
   @Override
@@ -47,7 +56,8 @@ public class EthGetTransactionByBlockHashAndIndex implements JsonRpcMethod {
     final Optional<TransactionWithMetadata> transactionWithMetadata =
         blockchain.transactionByBlockHashAndIndex(hash, index);
     final TransactionResult result =
-        transactionWithMetadata.map(TransactionCompleteResult::new).orElse(null);
+        retrievePrivatePayloadIfNecessary(
+            transactionWithMetadata.map(TransactionCompleteResult::new).orElse(null), enclave);
     return new JsonRpcSuccessResponse(requestContext.getRequest().getId(), result);
   }
 }

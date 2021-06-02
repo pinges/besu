@@ -63,7 +63,7 @@ public class PrivateWebSocketMethodsFactory {
   public Collection<JsonRpcMethod> methods() {
     final SubscriptionRequestMapper subscriptionRequestMapper = new SubscriptionRequestMapper();
     final EnclavePublicKeyProvider enclavePublicKeyProvider =
-        EnclavePublicKeyProvider.build(privacyParameters);
+        EnclavePublicKeyProvider.Provider.get(privacyParameters);
     final PrivacyController privacyController = createPrivacyController();
 
     return Set.of(
