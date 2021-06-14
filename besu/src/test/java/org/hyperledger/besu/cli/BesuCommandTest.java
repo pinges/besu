@@ -3487,7 +3487,7 @@ public class BesuCommandTest extends CommandTestAbstract {
   public void unrestrictedPrivacyEnabledFlagValueIsSet() {
     parseCommand(
         "--privacy-enabled",
-        "--privacy-unrestricted-enabled",
+        "--privacy-unrestricted-enabled-beta",
         "--min-gas-price",
         "0",
         "--privacy-public-key-file",
@@ -3517,7 +3517,7 @@ public class BesuCommandTest extends CommandTestAbstract {
         "--rpc-http-authentication-enabled",
         "--rpc-http-authentication-jwt-public-key-file",
         "/non/existent/file",
-        "--privacy-unrestricted-enabled");
+        "--privacy-unrestricted-enabled-beta");
 
     assertThat(commandErrorOutput.toString())
         .startsWith("Privacy unrestricted privacy can not be used in multi-tenant environment");
@@ -3526,7 +3526,7 @@ public class BesuCommandTest extends CommandTestAbstract {
   @Test
   public void unrestrictedPrivacyWithFlexiblePrivacyGroupsFails() {
     parseCommand(
-        "--privacy-enabled", "--privacy-flexible-groups-enabled", "--privacy-unrestricted-enabled");
+        "--privacy-enabled", "--privacy-flexible-groups-enabled", "--privacy-unrestricted-enabled-beta");
 
     assertThat(commandErrorOutput.toString())
         .startsWith(
