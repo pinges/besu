@@ -3526,7 +3526,9 @@ public class BesuCommandTest extends CommandTestAbstract {
   @Test
   public void unrestrictedPrivacyWithFlexiblePrivacyGroupsFails() {
     parseCommand(
-        "--privacy-enabled", "--privacy-flexible-groups-enabled", "--privacy-unrestricted-enabled-beta");
+        "--privacy-enabled",
+        "--privacy-flexible-groups-enabled",
+        "--privacy-unrestricted-enabled-beta");
 
     assertThat(commandErrorOutput.toString())
         .startsWith(
