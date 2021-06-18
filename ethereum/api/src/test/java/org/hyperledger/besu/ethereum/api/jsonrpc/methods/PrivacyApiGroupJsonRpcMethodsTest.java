@@ -24,7 +24,7 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.RpcApis;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequest;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.JsonRpcMethod;
-import org.hyperledger.besu.ethereum.api.jsonrpc.internal.privacy.methods.EnclavePublicKeyProvider;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.privacy.methods.PrivacyIdProvider;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.privacy.methods.MultiTenancyRpcMethodDecorator;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcResponse;
@@ -90,16 +90,16 @@ public class PrivacyApiGroupJsonRpcMethodsTest {
   @Test
   public void rpcsCreatedWithoutMultiTenancyUseFixedEnclavePublicKey() {
     when(privacyParameters.isEnabled()).thenReturn(true);
-    when(privacyParameters.getEnclavePublicKey()).thenReturn(DEFAULT_ENCLAVE_PUBLIC_KEY);
+    when(privacyParameters.getPrivacyUserId()).thenReturn(DEFAULT_ENCLAVE_PUBLIC_KEY);
 
     final User user = createUser(DEFAULT_ENCLAVE_PUBLIC_KEY);
     privacyApiGroupJsonRpcMethods.create();
-    final EnclavePublicKeyProvider enclavePublicKeyProvider =
-        privacyApiGroupJsonRpcMethods.enclavePublicKeyProvider;
+    final PrivacyIdProvider privacyIdProvider =
+        privacyApiGroupJsonRpcMethods.privacyIdProvider;
 
-    assertThat(enclavePublicKeyProvider.getEnclaveKey(Optional.of(user)))
+    assertThat(privacyIdProvider.getPrivacyUserId(Optional.of(user)))
         .isEqualTo(DEFAULT_ENCLAVE_PUBLIC_KEY);
-    assertThat(enclavePublicKeyProvider.getEnclaveKey(Optional.empty()))
+    assertThat(privacyIdProvider.getPrivacyUserId(Optional.empty()))
         .isEqualTo(DEFAULT_ENCLAVE_PUBLIC_KEY);
   }
 
@@ -112,11 +112,11 @@ public class PrivacyApiGroupJsonRpcMethodsTest {
     final User user2 = createUser("key2");
 
     privacyApiGroupJsonRpcMethods.create();
-    final EnclavePublicKeyProvider enclavePublicKeyProvider =
-        privacyApiGroupJsonRpcMethods.enclavePublicKeyProvider;
+    final PrivacyIdProvider privacyIdProvider =
+        privacyApiGroupJsonRpcMethods.privacyIdProvider;
 
-    assertThat(enclavePublicKeyProvider.getEnclaveKey(Optional.of(user1))).isEqualTo("key1");
-    assertThat(enclavePublicKeyProvider.getEnclaveKey(Optional.of(user2))).isEqualTo("key2");
+    assertThat(privacyIdProvider.getPrivacyUserId(Optional.of(user1))).isEqualTo("key1");
+    assertThat(privacyIdProvider.getPrivacyUserId(Optional.of(user2))).isEqualTo("key2");
   }
 
   @Test
@@ -125,10 +125,10 @@ public class PrivacyApiGroupJsonRpcMethodsTest {
     when(privacyParameters.isMultiTenancyEnabled()).thenReturn(true);
 
     privacyApiGroupJsonRpcMethods.create();
-    final EnclavePublicKeyProvider enclavePublicKeyProvider =
-        privacyApiGroupJsonRpcMethods.enclavePublicKeyProvider;
+    final PrivacyIdProvider privacyIdProvider =
+        privacyApiGroupJsonRpcMethods.privacyIdProvider;
 
-    assertThatThrownBy(() -> enclavePublicKeyProvider.getEnclaveKey(Optional.empty()))
+    assertThatThrownBy(() -> privacyIdProvider.getPrivacyUserId(Optional.empty()))
         .isInstanceOf(IllegalStateException.class)
         .hasMessage("Request does not contain an authorization token");
   }
@@ -167,7 +167,7 @@ public class PrivacyApiGroupJsonRpcMethodsTest {
 
     private final JsonRpcMethod rpcMethod;
     private PrivacyController privacyController;
-    private EnclavePublicKeyProvider enclavePublicKeyProvider;
+    private PrivacyIdProvider privacyIdProvider;
 
     public TestPrivacyApiGroupJsonRpcMethods(
         final BlockchainQueries blockchainQueries,
@@ -182,9 +182,9 @@ public class PrivacyApiGroupJsonRpcMethodsTest {
     @Override
     protected Map<String, JsonRpcMethod> create(
         final PrivacyController privacyController,
-        final EnclavePublicKeyProvider enclavePublicKeyProvider) {
+        final PrivacyIdProvider privacyIdProvider) {
       this.privacyController = privacyController;
-      this.enclavePublicKeyProvider = enclavePublicKeyProvider;
+      this.privacyIdProvider = privacyIdProvider;
       return mapOf(rpcMethod);
     }
 

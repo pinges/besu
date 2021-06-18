@@ -17,7 +17,7 @@ package org.hyperledger.besu.ethereum.api.jsonrpc.methods;
 import org.hyperledger.besu.ethereum.api.jsonrpc.RpcApi;
 import org.hyperledger.besu.ethereum.api.jsonrpc.RpcApis;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.JsonRpcMethod;
-import org.hyperledger.besu.ethereum.api.jsonrpc.internal.privacy.methods.EnclavePublicKeyProvider;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.privacy.methods.PrivacyIdProvider;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.privacy.methods.privx.PrivxFindOnChainPrivacyGroup;
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.core.PrivacyParameters;
@@ -45,9 +45,9 @@ public class PrivxJsonRpcMethods extends PrivacyApiGroupJsonRpcMethods {
   @Override
   protected Map<String, JsonRpcMethod> create(
       final PrivacyController privacyController,
-      final EnclavePublicKeyProvider enclavePublicKeyProvider) {
+      final PrivacyIdProvider privacyIdProvider) {
     if (getPrivacyParameters().isOnchainPrivacyGroupsEnabled()) {
-      return mapOf(new PrivxFindOnChainPrivacyGroup(privacyController, enclavePublicKeyProvider));
+      return mapOf(new PrivxFindOnChainPrivacyGroup(privacyController, privacyIdProvider));
     } else {
       return Map.of();
     }
