@@ -58,7 +58,7 @@ public class DebugOperationTracer implements OperationTracer {
   public void tracePreExecution(final MessageFrame frame) {
     preExecutionStack = captureStack(frame);
     gasRemaining = frame.getRemainingGas();
-    inputData = frame.getInputData().copy();
+    inputData = frame.getInputData();
     pc = frame.getPC();
   }
 
@@ -124,7 +124,7 @@ public class DebugOperationTracer implements OperationTracer {
               Optional.empty(),
               frame.getRecipientAddress(),
               frame.getValue(),
-              frame.getInputData().copy(),
+              frame.getInputData(),
               frame.getOutputData(),
               Optional.empty(),
               Optional.empty(),
@@ -170,7 +170,7 @@ public class DebugOperationTracer implements OperationTracer {
                     Optional.of(exceptionalHaltReason),
                     frame.getRecipientAddress(),
                     frame.getValue(),
-                    frame.getInputData().copy(),
+                    frame.getInputData(),
                     frame.getOutputData(),
                     Optional.empty(),
                     Optional.empty(),
