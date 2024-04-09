@@ -173,7 +173,7 @@ public class SyncTargetManager extends AbstractSyncTargetManager {
       if (protocolContext.getBlockchain().contains(pivotBlockHeader.getHash())) {
         protocolContext.getBlockchain().rewindToBlock(pivotBlockHeader.getHash());
       } else {
-        LOG.trace(
+        LOG.info(
             "Should continue downloading pivotBlockHeader {} chainHeadHash {}",
             pivotBlockHeader,
             protocolContext.getBlockchain().getChainHeadHash());
@@ -184,7 +184,7 @@ public class SyncTargetManager extends AbstractSyncTargetManager {
         worldStateStorageCoordinator.isWorldStateAvailable(
             pivotBlockHeader.getStateRoot(), pivotBlockHeader.getBlockHash());
     if (!worldStateAvailable) {
-      LOG.debug("Should not continue as worldstate not available");
+      LOG.info("Should not continue as worldstate not available");
     }
     return !worldStateAvailable;
   }
