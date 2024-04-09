@@ -31,8 +31,12 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class DownloadReceiptsStep
     implements Function<List<Block>, CompletableFuture<List<BlockWithReceipts>>> {
+  private static final Logger LOG = LoggerFactory.getLogger(DownloadReceiptsStep.class);
   private final EthContext ethContext;
   private final MetricsSystem metricsSystem;
 
@@ -43,6 +47,7 @@ public class DownloadReceiptsStep
 
   @Override
   public CompletableFuture<List<BlockWithReceipts>> apply(final List<Block> blocks) {
+    LOG.debug("Downloading receipts for blocks={}", blocks);
     final List<BlockHeader> headers = blocks.stream().map(Block::getHeader).collect(toList());
     final CompletableFuture<Map<BlockHeader, List<TransactionReceipt>>> getReceipts =
         GetReceiptsForHeadersTask.forHeaders(ethContext, headers, metricsSystem).run();

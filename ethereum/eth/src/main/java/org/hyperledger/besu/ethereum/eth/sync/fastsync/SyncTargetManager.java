@@ -173,10 +173,19 @@ public class SyncTargetManager extends AbstractSyncTargetManager {
       if (protocolContext.getBlockchain().contains(pivotBlockHeader.getHash())) {
         protocolContext.getBlockchain().rewindToBlock(pivotBlockHeader.getHash());
       } else {
+        LOG.trace(
+            "Should continue downloading pivotBlockHeader {} chainHeadHash {}",
+            pivotBlockHeader,
+            protocolContext.getBlockchain().getChainHeadHash());
         return true;
       }
     }
-    return !worldStateStorageCoordinator.isWorldStateAvailable(
-        pivotBlockHeader.getStateRoot(), pivotBlockHeader.getBlockHash());
+    boolean worldStateAvailable =
+        worldStateStorageCoordinator.isWorldStateAvailable(
+            pivotBlockHeader.getStateRoot(), pivotBlockHeader.getBlockHash());
+    if (!worldStateAvailable) {
+      LOG.debug("Should not continue as worldstate not available");
+    }
+    return !worldStateAvailable;
   }
 }

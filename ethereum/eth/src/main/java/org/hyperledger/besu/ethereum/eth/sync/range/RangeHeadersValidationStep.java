@@ -25,8 +25,11 @@ import org.hyperledger.besu.ethereum.mainnet.ProtocolSpec;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
-public class RangeHeadersValidationStep implements Function<RangeHeaders, Stream<BlockHeader>> {
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+public class RangeHeadersValidationStep implements Function<RangeHeaders, Stream<BlockHeader>> {
+  private static final Logger LOG = LoggerFactory.getLogger(RangeHeadersValidationStep.class);
   private final ProtocolSchedule protocolSchedule;
   private final ProtocolContext protocolContext;
   private final ValidationPolicy validationPolicy;
@@ -48,7 +51,10 @@ public class RangeHeadersValidationStep implements Function<RangeHeaders, Stream
         .getFirstHeaderToImport()
         .map(
             firstHeader -> {
-              if (isValid(rangeStart, firstHeader)) {
+              boolean valid = isValid(rangeStart, firstHeader);
+              LOG.debug(
+                  "Validating headers for range={} isValid={}", rangeHeaders.getRange(), valid);
+              if (valid) {
                 return rangeHeaders.getHeadersToImport().stream();
               } else {
                 final String rangeEndDescription;

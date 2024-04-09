@@ -107,7 +107,10 @@ public class PipelineChainDownloader implements ChainDownloader {
     syncState.clearSyncTarget();
     if (syncTargetManager.shouldContinueDownloading()
         && !syncState.hasReachedTerminalDifficulty().orElse(Boolean.FALSE)) {
-      LOG.debug("PipelineChain repeating continueDownloading {}, hasReachedTerminalTTD {}", syncTargetManager.shouldContinueDownloading(), syncState.hasReachedTerminalDifficulty());
+      LOG.debug(
+          "PipelineChain repeating continueDownloading {}, hasReachedTerminalTTD {}",
+          syncTargetManager.shouldContinueDownloading(),
+          syncState.hasReachedTerminalDifficulty());
       return performDownload();
     } else {
       LOG.info("PipelineChain download complete");
