@@ -37,6 +37,7 @@ import org.hyperledger.besu.util.ExceptionUtils;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -252,7 +253,15 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "requestDataAvailable", bufferCapacity, outputCounter, true, "node_data_request")
               .andFinishWith(
                   "requestCompleteTask",
-                  task -> completeTaskStep.markAsCompleteOrFailed(downloadState, task));
+                  task -> {
+                    try {
+                      completeTaskStep.markAsCompleteOrFailed(downloadState, task);
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
+                  });
 
       final Pipe<Task<SnapDataRequest>> requestsToComplete = completionPipeline.getInputPipe();
 
@@ -260,7 +269,16 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
           createPipelineFrom(
                   "dequeueAccountRequestBlocking",
                   new TaskQueueIterator<>(
-                      downloadState, () -> downloadState.dequeueAccountRequestBlocking()),
+                      downloadState,
+                      () -> {
+                        try {
+                          return downloadState.dequeueAccountRequestBlocking();
+                        } catch (RuntimeException e) {
+                          LOG.info("Sync exception detected " + e);
+                          e.printStackTrace();
+                          throw e;
+                        }
+                      }),
                   bufferCapacity,
                   outputCounter,
                   true,
@@ -268,21 +286,65 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
               .thenProcess(
                   "checkNewPivotBlock-Account",
                   tasks -> {
-                    pivotBlockManager.check(doNothingOnPivotChange);
-                    return tasks;
+                    try {
+                      pivotBlockManager.check(doNothingOnPivotChange);
+                      return tasks;
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
                   })
               .thenProcessAsync(
                   "batchDownloadAccountData",
-                  requestTask -> requestDataStep.requestAccount(requestTask),
+                  requestTask -> {
+                    try {
+
+                      return requestDataStep.requestAccount(requestTask);
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
+                  },
                   maxOutstandingRequests)
-              .thenProcess("batchPersistAccountData", task -> persistDataStep.persist(task))
-              .andFinishWith("batchAccountDataDownloaded", requestsToComplete::put);
+              .thenProcess(
+                  "batchPersistAccountData",
+                  task -> {
+                    try {
+                      return persistDataStep.persist(task);
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
+                  })
+              .andFinishWith(
+                  "batchAccountDataDownloaded",
+                  task -> {
+                    try {
+                      requestsToComplete.put(task);
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
+                  });
 
       final Pipeline<Task<SnapDataRequest>> fetchStorageDataPipeline =
           createPipelineFrom(
                   "dequeueStorageRequestBlocking",
                   new TaskQueueIterator<>(
-                      downloadState, () -> downloadState.dequeueStorageRequestBlocking()),
+                      downloadState,
+                      () -> {
+                        try {
+                          return downloadState.dequeueStorageRequestBlocking();
+                        } catch (RuntimeException e) {
+                          LOG.info("Sync exception detected " + e);
+                          e.printStackTrace();
+                          throw e;
+                        }
+                      }),
                   bufferCapacity,
                   outputCounter,
                   true,
@@ -291,25 +353,64 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
               .thenProcess(
                   "checkNewPivotBlock-Storage",
                   tasks -> {
-                    pivotBlockManager.check(doNothingOnPivotChange);
-                    return tasks;
+                    try {
+                      pivotBlockManager.check(doNothingOnPivotChange);
+                      return tasks;
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
                   })
               .thenProcessAsyncOrdered(
                   "batchDownloadStorageData",
-                  requestTask -> requestDataStep.requestStorage(requestTask),
+                  requestTask -> {
+                    try {
+                      return requestDataStep.requestStorage(requestTask);
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
+                  },
                   maxOutstandingRequests)
-              .thenProcess("batchPersistStorageData", task -> persistDataStep.persist(task))
+              .thenProcess(
+                  "batchPersistStorageData",
+                  task -> {
+                    try {
+                      return persistDataStep.persist(task);
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
+                  })
               .andFinishWith(
                   "batchStorageDataDownloaded",
                   tasks -> {
-                    tasks.forEach(requestsToComplete::put);
+                    try {
+                      tasks.forEach(requestsToComplete::put);
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
                   });
 
       final Pipeline<Task<SnapDataRequest>> fetchLargeStorageDataPipeline =
           createPipelineFrom(
                   "dequeueLargeStorageRequestBlocking",
                   new TaskQueueIterator<>(
-                      downloadState, () -> downloadState.dequeueLargeStorageRequestBlocking()),
+                      downloadState,
+                      () -> {
+                        try {
+                          return downloadState.dequeueLargeStorageRequestBlocking();
+                        } catch (RuntimeException e) {
+                          LOG.info("Sync exception detected " + e);
+                          e.printStackTrace();
+                          throw e;
+                        }
+                      }),
                   bufferCapacity,
                   outputCounter,
                   true,
@@ -317,18 +418,38 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
               .thenProcess(
                   "checkNewPivotBlock-LargeStorage",
                   tasks -> {
-                    pivotBlockManager.check(doNothingOnPivotChange);
-                    return tasks;
+                    try {
+                      pivotBlockManager.check(doNothingOnPivotChange);
+                      return tasks;
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
                   })
               .thenProcessAsyncOrdered(
                   "batchDownloadLargeStorageData",
-                  requestTask -> requestDataStep.requestStorage(List.of(requestTask)),
+                  requestTask -> {
+                    try {
+                      return requestDataStep.requestStorage(List.of(requestTask));
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
+                  },
                   maxOutstandingRequests)
               .thenProcess(
                   "batchPersistLargeStorageData",
                   task -> {
-                    persistDataStep.persist(task);
-                    return task;
+                    try {
+                      persistDataStep.persist(task);
+                      return task;
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
                   })
               .andFinishWith(
                   "batchLargeStorageDataDownloaded",
@@ -338,39 +459,78 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
           createPipelineFrom(
                   "dequeueCodeRequestBlocking",
                   new TaskQueueIterator<>(
-                      downloadState, () -> downloadState.dequeueCodeRequestBlocking()),
+                      downloadState,
+                      () -> {
+                        try {
+                          return downloadState.dequeueCodeRequestBlocking();
+                        } catch (RuntimeException e) {
+                          LOG.info("Sync exception detected " + e);
+                          e.printStackTrace();
+                          throw e;
+                        }
+                      }),
                   bufferCapacity,
                   outputCounter,
                   true,
                   "code_blocks_download_pipeline")
               .inBatches(
                   snapSyncConfiguration.getBytecodeCountPerRequest() * 2,
-                  tasks ->
-                      snapSyncConfiguration.getBytecodeCountPerRequest()
-                          - (int)
-                              tasks.stream()
-                                  .map(Task::getData)
-                                  .map(BytecodeRequest.class::cast)
-                                  .map(BytecodeRequest::getCodeHash)
-                                  .distinct()
-                                  .count())
+                  new Function<List<Task<SnapDataRequest>>, Integer>() {
+                    @Override
+                    public Integer apply(final List<Task<SnapDataRequest>> tasks) {
+                      try {
+                        return snapSyncConfiguration.getBytecodeCountPerRequest()
+                            - (int)
+                                tasks.stream()
+                                    .map(Task::getData)
+                                    .map(BytecodeRequest.class::cast)
+                                    .map(BytecodeRequest::getCodeHash)
+                                    .distinct()
+                                    .count();
+                      } catch (RuntimeException e) {
+                        LOG.info("Sync exception detected " + e);
+                        e.printStackTrace();
+                        throw e;
+                      }
+                    }
+                  })
               .thenProcess(
                   "checkNewPivotBlock-Code",
                   tasks -> {
-                    pivotBlockManager.check(
-                        (blockHeader, newBlockFound) ->
-                            reloadHealWhenNeeded(snapSyncState, downloadState, newBlockFound));
-                    return tasks;
+                    try {
+                      pivotBlockManager.check(
+                          (blockHeader, newBlockFound) ->
+                              reloadHealWhenNeeded(snapSyncState, downloadState, newBlockFound));
+                      return tasks;
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
                   })
               .thenProcessAsyncOrdered(
                   "batchDownloadCodeData",
-                  tasks -> requestDataStep.requestCode(tasks),
+                  tasks -> {
+                    try {
+                      return requestDataStep.requestCode(tasks);
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
+                  },
                   maxOutstandingRequests)
               .thenProcess(
                   "batchPersistCodeData",
                   tasks -> {
-                    persistDataStep.persist(tasks);
-                    return tasks;
+                    try {
+                      persistDataStep.persist(tasks);
+                      return tasks;
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
                   })
               .andFinishWith(
                   "batchCodeDataDownloaded", tasks -> tasks.forEach(requestsToComplete::put));
@@ -379,34 +539,71 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
           createPipelineFrom(
                   "requestTrieNodeDequeued",
                   new TaskQueueIterator<>(
-                      downloadState, () -> downloadState.dequeueTrieNodeRequestBlocking()),
+                      downloadState,
+                      () -> {
+                        try {
+                          return downloadState.dequeueTrieNodeRequestBlocking();
+                        } catch (RuntimeException e) {
+                          LOG.info("Sync exception detected " + e);
+                          e.printStackTrace();
+                          throw e;
+                        }
+                      }),
                   bufferCapacity,
                   outputCounter,
                   true,
                   "world_state_heal")
               .thenFlatMapInParallel(
                   "requestLoadLocalTrieNodeData",
-                  task -> loadLocalDataStep.loadLocalDataTrieNode(task, requestsToComplete),
+                  task -> {
+                    try {
+                      return loadLocalDataStep.loadLocalDataTrieNode(task, requestsToComplete);
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
+                  },
                   3,
                   bufferCapacity)
               .inBatches(snapSyncConfiguration.getTrienodeCountPerRequest())
               .thenProcess(
                   "checkNewPivotBlock-TrieNode",
                   tasks -> {
-                    pivotBlockManager.check(
-                        (blockHeader, newBlockFound) ->
-                            reloadHealWhenNeeded(snapSyncState, downloadState, newBlockFound));
-                    return tasks;
+                    try {
+                      pivotBlockManager.check(
+                          (blockHeader, newBlockFound) ->
+                              reloadHealWhenNeeded(snapSyncState, downloadState, newBlockFound));
+                      return tasks;
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
                   })
               .thenProcessAsync(
                   "batchDownloadTrieNodeData",
-                  tasks -> requestDataStep.requestTrieNodeByPath(tasks),
+                  tasks -> {
+                    try {
+                      return requestDataStep.requestTrieNodeByPath(tasks);
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
+                  },
                   maxOutstandingRequests)
               .thenProcess(
                   "batchPersistTrieNodeData",
                   tasks -> {
-                    persistDataStep.persist(tasks);
-                    return tasks;
+                    try {
+                      persistDataStep.persist(tasks);
+                      return tasks;
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
                   })
               .andFinishWith(
                   "batchTrieNodeDataDownloaded", tasks -> tasks.forEach(requestsToComplete::put));
@@ -416,18 +613,42 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "dequeueFlatAccountRequestBlocking",
                   new TaskQueueIterator<>(
                       downloadState,
-                      () -> downloadState.dequeueAccountFlatDatabaseHealingRequestBlocking()),
+                      () -> {
+                        try {
+                          return downloadState.dequeueAccountFlatDatabaseHealingRequestBlocking();
+                        } catch (RuntimeException e) {
+                          LOG.info("Sync exception detected " + e);
+                          e.printStackTrace();
+                          throw e;
+                        }
+                      }),
                   bufferCapacity,
                   outputCounter,
                   true,
                   "world_state_heal")
               .thenProcessAsync(
                   "batchDownloadFlatAccountData",
-                  requestTask -> requestDataStep.requestLocalFlatAccounts(requestTask),
+                  requestTask -> {
+                    try {
+                      return requestDataStep.requestLocalFlatAccounts(requestTask);
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
+                  },
                   maxOutstandingRequests)
               .thenProcess(
                   "batchHealAndPersistFlatAccountData",
-                  task -> persistDataStep.healFlatDatabase(task))
+                  task -> {
+                    try {
+                      return persistDataStep.healFlatDatabase(task);
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
+                  })
               .andFinishWith("batchFlatAccountDataDownloaded", requestsToComplete::put);
 
       final Pipeline<Task<SnapDataRequest>> storageFlatDatabaseHealingPipeline =
@@ -435,18 +656,42 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "dequeueFlatStorageRequestBlocking",
                   new TaskQueueIterator<>(
                       downloadState,
-                      () -> downloadState.dequeueStorageFlatDatabaseHealingRequestBlocking()),
+                      () -> {
+                        try {
+                          return downloadState.dequeueStorageFlatDatabaseHealingRequestBlocking();
+                        } catch (RuntimeException e) {
+                          LOG.info("Sync exception detected " + e);
+                          e.printStackTrace();
+                          throw e;
+                        }
+                      }),
                   bufferCapacity,
                   outputCounter,
                   true,
                   "world_state_heal")
               .thenProcessAsyncOrdered(
                   "batchDownloadFlatStorageData",
-                  requestTask -> requestDataStep.requestLocalFlatStorages(requestTask),
+                  requestTask -> {
+                    try {
+                      return requestDataStep.requestLocalFlatStorages(requestTask);
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
+                  },
                   maxOutstandingRequests)
               .thenProcess(
                   "batchHealAndPersistFlatStorageData",
-                  task -> persistDataStep.healFlatDatabase(task))
+                  task -> {
+                    try {
+                      return persistDataStep.healFlatDatabase(task);
+                    } catch (RuntimeException e) {
+                      LOG.info("Sync exception detected " + e);
+                      e.printStackTrace();
+                      throw e;
+                    }
+                  })
               .andFinishWith("batchFlatStorageDataDownloaded", requestsToComplete::put);
 
       return new SnapWorldStateDownloadProcess(
