@@ -64,7 +64,7 @@ public class ImportBlocksStep implements Consumer<List<BlockWithReceipts>> {
   @Override
   public void accept(final List<BlockWithReceipts> blocksWithReceipts) {
     final long startTime = System.nanoTime();
-    LOG.debug("Importing blocks {}", blocksWithReceipts);
+    LOG.debug("Importing blocks");
     for (final BlockWithReceipts blockWithReceipts : blocksWithReceipts) {
       if (!importBlock(blockWithReceipts)) {
         throw InvalidBlockException.fromInvalidBlock(blockWithReceipts.getHeader());

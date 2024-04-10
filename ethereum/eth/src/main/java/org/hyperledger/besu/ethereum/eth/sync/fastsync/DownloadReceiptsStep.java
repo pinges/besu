@@ -47,7 +47,7 @@ public class DownloadReceiptsStep
 
   @Override
   public CompletableFuture<List<BlockWithReceipts>> apply(final List<Block> blocks) {
-    LOG.info("Downloading receipts for blocks={}", blocks);
+    LOG.info("Downloading receipts");
     final List<BlockHeader> headers = blocks.stream().map(Block::getHeader).collect(toList());
     final CompletableFuture<Map<BlockHeader, List<TransactionReceipt>>> getReceipts =
         GetReceiptsForHeadersTask.forHeaders(ethContext, headers, metricsSystem).run();
