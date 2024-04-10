@@ -46,7 +46,7 @@ public class DownloadBodiesStep
 
   @Override
   public CompletableFuture<List<Block>> apply(final List<BlockHeader> blockHeaders) {
-    LOG.info("Downloading bodies headers={}", blockHeaders);
+    LOG.info("Downloading bodies headers={}", blockHeaders.stream().map(BlockHeader::getHash));
     return CompleteBlocksTask.forHeaders(protocolSchedule, ethContext, blockHeaders, metricsSystem)
         .run();
   }
