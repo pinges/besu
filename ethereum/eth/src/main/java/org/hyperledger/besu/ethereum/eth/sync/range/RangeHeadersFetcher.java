@@ -68,6 +68,10 @@ public class RangeHeadersFetcher {
 
   public CompletableFuture<List<BlockHeader>> getNextRangeHeaders(
       final EthPeer peer, final BlockHeader previousRangeHeader) {
+    LOG.info(
+        "Getting next range headers peer={} previousRangeHeader={}",
+        peer,
+        previousRangeHeader.getBlockHash());
     final int skip = syncConfig.getDownloaderChainSegmentSize() - 1;
     final int maximumHeaderRequestSize = syncConfig.getDownloaderHeaderRequestSize();
     final long previousRangeNumber = previousRangeHeader.getNumber();
@@ -75,14 +79,17 @@ public class RangeHeadersFetcher {
     final int additionalHeaderCount;
     final Optional<BlockHeader> finalRangeHeader = fastSyncState.getPivotBlockHeader();
     if (finalRangeHeader.isPresent()) {
+      LOG.info("Has final range header");
       final BlockHeader targetHeader = finalRangeHeader.get();
       final long blocksUntilTarget = targetHeader.getNumber() - previousRangeNumber;
       if (blocksUntilTarget <= 0) {
+        LOG.info("blocksUntilTarget = {}", blocksUntilTarget);
         return completedFuture(emptyList());
       }
       final long maxHeadersToRequest = blocksUntilTarget / (skip + 1);
       additionalHeaderCount = (int) Math.min(maxHeadersToRequest, maximumHeaderRequestSize);
       if (additionalHeaderCount == 0) {
+        LOG.info("Additional header count = {}", additionalHeaderCount);
         return completedFuture(singletonList(targetHeader));
       }
     } else {
@@ -97,7 +104,7 @@ public class RangeHeadersFetcher {
       final BlockHeader referenceHeader,
       final int headerCount,
       final int skip) {
-    LOG.trace(
+    LOG.info(
         "Requesting {} range headers, starting from {}, {} blocks apart",
         headerCount,
         referenceHeader.getNumber(),

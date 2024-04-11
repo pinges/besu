@@ -104,15 +104,19 @@ public class SyncTargetRangeSource implements Iterator<SyncTargetRange> {
   @Override
   public SyncTargetRange next() {
     if (!retrievedRanges.isEmpty()) {
+      LOG.info("Retrieved ranges empty");
       return retrievedRanges.poll();
     }
     if (pendingRequests.isPresent()) {
+      LOG.info("get range from pending request");
       return getRangeFromPendingRequest();
     }
     if (reachedEndOfRanges) {
+      LOG.info("Reached end of ranges");
       return null;
     }
     if (fetcher.nextRangeEndsAtChainHead(peer, lastRangeEnd)) {
+      LOG.info("Next range ends at chainhead");
       reachedEndOfRanges = true;
       return new SyncTargetRange(peer, lastRangeEnd);
     }
@@ -125,10 +129,16 @@ public class SyncTargetRangeSource implements Iterator<SyncTargetRange> {
         .getNextRangeHeaders(peer, lastRangeEnd)
         .exceptionally(
             error -> {
-              LOG.debug("Failed to retrieve range headers", error);
+              LOG.info("Failed to retrieve range headers", error);
               return emptyList();
             })
-        .thenCompose(range -> range.isEmpty() ? pauseBriefly() : completedFuture(range));
+        .thenCompose(
+            range -> {
+              LOG.info(
+                  "Retrieved headers for header range {}",
+                  range.stream().map(BlockHeader::getBlockHash));
+              return range.isEmpty() ? pauseBriefly() : completedFuture(range);
+            });
   }
 
   /**
@@ -158,10 +168,10 @@ public class SyncTargetRangeSource implements Iterator<SyncTargetRange> {
       }
       return retrievedRanges.poll();
     } catch (final InterruptedException e) {
-      LOG.trace("Interrupted while waiting for new range headers", e);
+      LOG.info("Interrupted while waiting for new range headers", e);
       return null;
     } catch (final ExecutionException e) {
-      LOG.debug("Failed to retrieve new range headers", e);
+      LOG.info("Failed to retrieve new range headers", e);
       this.pendingRequests = Optional.empty();
       requestFailureCount++;
       return null;
