@@ -20,6 +20,7 @@ import static org.hyperledger.besu.ethereum.eth.sync.StorageExceptionManager.get
 
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.SnapDataRequest;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.heal.TrieNodeHealingRequest;
+import org.hyperledger.besu.ethereum.trie.MerkleTrieException;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateKeyValueStorage;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateStorageCoordinator;
 import org.hyperledger.besu.metrics.BesuMetricCategory;
@@ -102,6 +103,9 @@ public class LoadLocalDataStep {
       } else {
         throw storageException;
       }
+    } catch (MerkleTrieException merkleTrieException) {
+      LOG.info("Encountered merkleTrieException triggering trie heal", merkleTrieException);
+      downloadState.reloadTrieHeal();
     }
     return Stream.of(task);
   }
