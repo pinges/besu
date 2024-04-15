@@ -53,7 +53,10 @@ public class RangeHeadersValidationStep implements Function<RangeHeaders, Stream
             firstHeader -> {
               boolean valid = isValid(rangeStart, firstHeader);
               LOG.info(
-                  "Validating headers for range {} to {} isValid={}", rangeHeaders.getRange().getStart(), rangeHeaders.getRange().getEnd(), valid);
+                  "Validating headers for range {} to {} isValid={}",
+                  rangeHeaders.getRange().getStart(),
+                  rangeHeaders.getRange().getEnd(),
+                  valid);
               if (valid) {
                 return rangeHeaders.getHeadersToImport().stream();
               } else {
