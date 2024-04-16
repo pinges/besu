@@ -72,7 +72,8 @@ public class DownloadHeadersStep
   }
 
   private CompletableFuture<List<BlockHeader>> downloadHeaders(final SyncTargetRange range) {
-    LOG.info("Downloading headers");
+    LOG.info(
+        "Downloading headers {} to {}", range.getStart().getNumber(), range.getEnd().getNumber());
 
     if (range.hasEnd()) {
       LOG.debug(

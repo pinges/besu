@@ -272,6 +272,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                       downloadState,
                       () -> {
                         try {
+                          LOG.info("dequeueAccountRequestBlocking");
                           return downloadState.dequeueAccountRequestBlocking();
                         } catch (RuntimeException e) {
                           LOG.info("Sync exception detected " + e);
@@ -287,6 +288,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "checkNewPivotBlock-Account",
                   tasks -> {
                     try {
+                      LOG.info("checkNewPivotBlock-Account");
                       pivotBlockManager.check(doNothingOnPivotChange);
                       return tasks;
                     } catch (RuntimeException e) {
@@ -299,7 +301,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchDownloadAccountData",
                   requestTask -> {
                     try {
-
+                      LOG.info("batchDownloadAccountData");
                       return requestDataStep.requestAccount(requestTask);
                     } catch (RuntimeException e) {
                       LOG.info("Sync exception detected " + e);
@@ -312,6 +314,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchPersistAccountData",
                   task -> {
                     try {
+                      LOG.info("batchPersistAccountData");
                       return persistDataStep.persist(task);
                     } catch (RuntimeException e) {
                       LOG.info("Sync exception detected " + e);
@@ -323,6 +326,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchAccountDataDownloaded",
                   task -> {
                     try {
+                      LOG.info("batchAccountDataDownloaded");
                       requestsToComplete.put(task);
                     } catch (RuntimeException e) {
                       LOG.info("Sync exception detected " + e);
@@ -338,6 +342,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                       downloadState,
                       () -> {
                         try {
+                          LOG.info("dequeueStorageRequestBlocking");
                           return downloadState.dequeueStorageRequestBlocking();
                         } catch (RuntimeException e) {
                           LOG.info("Sync exception detected " + e);
@@ -354,6 +359,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "checkNewPivotBlock-Storage",
                   tasks -> {
                     try {
+                      LOG.info("checkNewPivotBlock-Storage");
                       pivotBlockManager.check(doNothingOnPivotChange);
                       return tasks;
                     } catch (RuntimeException e) {
@@ -366,6 +372,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchDownloadStorageData",
                   requestTask -> {
                     try {
+                      LOG.info("batchDownloadStorageData");
                       return requestDataStep.requestStorage(requestTask);
                     } catch (RuntimeException e) {
                       LOG.info("Sync exception detected " + e);
@@ -378,6 +385,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchPersistStorageData",
                   task -> {
                     try {
+                      LOG.info("batchPersistStorageData");
                       return persistDataStep.persist(task);
                     } catch (RuntimeException e) {
                       LOG.info("Sync exception detected " + e);
@@ -389,6 +397,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchStorageDataDownloaded",
                   tasks -> {
                     try {
+                      LOG.info("batchStorageDataDownloaded");
                       tasks.forEach(requestsToComplete::put);
                     } catch (RuntimeException e) {
                       LOG.info("Sync exception detected " + e);
@@ -404,6 +413,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                       downloadState,
                       () -> {
                         try {
+                          LOG.info("dequeueLargeStorageRequestBlocking");
                           return downloadState.dequeueLargeStorageRequestBlocking();
                         } catch (RuntimeException e) {
                           LOG.info("Sync exception detected " + e);
@@ -419,6 +429,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "checkNewPivotBlock-LargeStorage",
                   tasks -> {
                     try {
+                      LOG.info("checkNewPivotBlock-LargeStorage");
                       pivotBlockManager.check(doNothingOnPivotChange);
                       return tasks;
                     } catch (RuntimeException e) {
@@ -431,6 +442,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchDownloadLargeStorageData",
                   requestTask -> {
                     try {
+                      LOG.info("batchDownloadLargeStorageData");
                       return requestDataStep.requestStorage(List.of(requestTask));
                     } catch (RuntimeException e) {
                       LOG.info("Sync exception detected " + e);
@@ -443,6 +455,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchPersistLargeStorageData",
                   task -> {
                     try {
+                      LOG.info("batchPersistLargeStorageData");
                       persistDataStep.persist(task);
                       return task;
                     } catch (RuntimeException e) {
@@ -462,6 +475,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                       downloadState,
                       () -> {
                         try {
+                          LOG.info("dequeueCodeRequestBlocking");
                           return downloadState.dequeueCodeRequestBlocking();
                         } catch (RuntimeException e) {
                           LOG.info("Sync exception detected " + e);
@@ -498,6 +512,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "checkNewPivotBlock-Code",
                   tasks -> {
                     try {
+                      LOG.info("checkNewPivotBlock-Code");
                       pivotBlockManager.check(
                           (blockHeader, newBlockFound) ->
                               reloadHealWhenNeeded(snapSyncState, downloadState, newBlockFound));
@@ -512,6 +527,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchDownloadCodeData",
                   tasks -> {
                     try {
+                      LOG.info("batchDownloadCodeData");
                       return requestDataStep.requestCode(tasks);
                     } catch (RuntimeException e) {
                       LOG.info("Sync exception detected " + e);
@@ -524,6 +540,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchPersistCodeData",
                   tasks -> {
                     try {
+                      LOG.info("batchPersistCodeData");
                       persistDataStep.persist(tasks);
                       return tasks;
                     } catch (RuntimeException e) {
@@ -542,6 +559,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                       downloadState,
                       () -> {
                         try {
+                          LOG.info("requestTrieNodeDequeued");
                           return downloadState.dequeueTrieNodeRequestBlocking();
                         } catch (RuntimeException e) {
                           LOG.info("Sync exception detected " + e);
@@ -557,6 +575,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "requestLoadLocalTrieNodeData",
                   task -> {
                     try {
+                      LOG.info("requestLoadLocalTrieNodeData");
                       return loadLocalDataStep.loadLocalDataTrieNode(task, requestsToComplete);
                     } catch (RuntimeException e) {
                       LOG.info("Sync exception detected " + e);
@@ -571,6 +590,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "checkNewPivotBlock-TrieNode",
                   tasks -> {
                     try {
+                      LOG.info("checkNewPivotBlock-TrieNode");
                       pivotBlockManager.check(
                           (blockHeader, newBlockFound) ->
                               reloadHealWhenNeeded(snapSyncState, downloadState, newBlockFound));
@@ -585,6 +605,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchDownloadTrieNodeData",
                   tasks -> {
                     try {
+                      LOG.info("batchDownloadTrieNodeData");
                       return requestDataStep.requestTrieNodeByPath(tasks);
                     } catch (RuntimeException e) {
                       LOG.info("Sync exception detected " + e);
@@ -597,6 +618,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchPersistTrieNodeData",
                   tasks -> {
                     try {
+                      LOG.info("batchPersistTrieNodeData");
                       persistDataStep.persist(tasks);
                       return tasks;
                     } catch (RuntimeException e) {
@@ -615,6 +637,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                       downloadState,
                       () -> {
                         try {
+                          LOG.info("dequeueFlatAccountRequestBlocking");
                           return downloadState.dequeueAccountFlatDatabaseHealingRequestBlocking();
                         } catch (RuntimeException e) {
                           LOG.info("Sync exception detected " + e);
@@ -630,6 +653,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchDownloadFlatAccountData",
                   requestTask -> {
                     try {
+                      LOG.info("batchDownloadFlatAccountData");
                       return requestDataStep.requestLocalFlatAccounts(requestTask);
                     } catch (RuntimeException e) {
                       LOG.info("Sync exception detected " + e);
@@ -642,6 +666,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchHealAndPersistFlatAccountData",
                   task -> {
                     try {
+                      LOG.info("batchHealAndPersistFlatAccountData");
                       return persistDataStep.healFlatDatabase(task);
                     } catch (RuntimeException e) {
                       LOG.info("Sync exception detected " + e);
@@ -658,6 +683,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                       downloadState,
                       () -> {
                         try {
+                          LOG.info("dequeueFlatStorageRequestBlocking");
                           return downloadState.dequeueStorageFlatDatabaseHealingRequestBlocking();
                         } catch (RuntimeException e) {
                           LOG.info("Sync exception detected " + e);
@@ -673,6 +699,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchDownloadFlatStorageData",
                   requestTask -> {
                     try {
+                      LOG.info("batchDownloadFlatStorageData");
                       return requestDataStep.requestLocalFlatStorages(requestTask);
                     } catch (RuntimeException e) {
                       LOG.info("Sync exception detected " + e);
@@ -685,6 +712,7 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchHealAndPersistFlatStorageData",
                   task -> {
                     try {
+                      LOG.info("batchHealAndPersistFlatStorageData");
                       return persistDataStep.healFlatDatabase(task);
                     } catch (RuntimeException e) {
                       LOG.info("Sync exception detected " + e);
