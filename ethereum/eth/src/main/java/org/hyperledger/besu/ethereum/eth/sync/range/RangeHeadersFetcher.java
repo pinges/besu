@@ -127,11 +127,12 @@ public class RangeHeadersFetcher {
   private List<BlockHeader> stripExistingRangeHeaders(
       final BlockHeader lastHeader, final List<BlockHeader> headers) {
     if (!headers.isEmpty()) {
-      LOG.atTrace().setMessage("RangeHeaders retrieved: {} - {}")
-              .addArgument(headers.get(0).getNumber())
-              .addArgument(headers.get(headers.size() - 1).getNumber())
-              .log();
-      if( headers.get(0).equals(lastHeader)) {
+      LOG.atTrace()
+          .setMessage("RangeHeaders retrieved: {} - {}")
+          .addArgument(headers.get(0).getNumber())
+          .addArgument(headers.get(headers.size() - 1).getNumber())
+          .log();
+      if (headers.get(0).equals(lastHeader)) {
         return headers.subList(1, headers.size());
       }
     } else {
