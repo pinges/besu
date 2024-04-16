@@ -104,7 +104,7 @@ public class SyncTargetRangeSource implements Iterator<SyncTargetRange> {
   @Override
   public SyncTargetRange next() {
     if (!retrievedRanges.isEmpty()) {
-      LOG.info("Retrieved ranges empty");
+      LOG.info("Retrieved ranges not empty");
       return retrievedRanges.poll();
     }
     if (pendingRequests.isPresent()) {
@@ -158,10 +158,12 @@ public class SyncTargetRangeSource implements Iterator<SyncTargetRange> {
           pendingRequest.get(newHeaderWaitDuration.toMillis(), MILLISECONDS);
       this.pendingRequests = Optional.empty();
       if (newHeaders.isEmpty()) {
+        // newHeaders is empty -> requestFailureCount++
         requestFailureCount++;
       } else {
         requestFailureCount = 0;
       }
+      // newHeaders is empty -> return null
       for (final BlockHeader header : newHeaders) {
         retrievedRanges.add(new SyncTargetRange(peer, lastRangeEnd, header));
         lastRangeEnd = header;

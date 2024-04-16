@@ -126,8 +126,16 @@ public class RangeHeadersFetcher {
 
   private List<BlockHeader> stripExistingRangeHeaders(
       final BlockHeader lastHeader, final List<BlockHeader> headers) {
-    if (!headers.isEmpty() && headers.get(0).equals(lastHeader)) {
-      return headers.subList(1, headers.size());
+    if (!headers.isEmpty()) {
+      LOG.atTrace().setMessage("RangeHeaders retrieved: {} - {}")
+              .addArgument(headers.get(0).getNumber())
+              .addArgument(headers.get(headers.size() - 1).getNumber())
+              .log();
+      if( headers.get(0).equals(lastHeader)) {
+        return headers.subList(1, headers.size());
+      }
+    } else {
+      LOG.trace("Range headers list retrieved is empty.");
     }
     return headers;
   }
