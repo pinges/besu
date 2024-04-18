@@ -162,11 +162,11 @@ public class SyncTargetRangeSource implements Iterator<SyncTargetRange> {
         requestFailureCount++;
       } else {
         requestFailureCount = 0;
-      }
-      // newHeaders is empty -> return null
-      for (final BlockHeader header : newHeaders) {
-        retrievedRanges.add(new SyncTargetRange(peer, lastRangeEnd, header));
-        lastRangeEnd = header;
+        // newHeaders is empty -> return null
+        for (final BlockHeader header : newHeaders) {
+          retrievedRanges.add(new SyncTargetRange(peer, lastRangeEnd, header));
+          lastRangeEnd = header;
+        }
       }
       return retrievedRanges.poll();
     } catch (final InterruptedException e) {
