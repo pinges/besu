@@ -15,6 +15,7 @@
 package org.hyperledger.besu.ethereum.eth.manager;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 import org.hyperledger.besu.ethereum.eth.EthProtocol;
 import org.hyperledger.besu.ethereum.eth.EthProtocolConfiguration;
@@ -41,6 +42,7 @@ import org.junit.jupiter.api.Test;
 public class RequestManagerTest {
 
   private final AtomicLong requestIdCounter = new AtomicLong(1);
+  private final EthScheduler ethScheduler = mock(EthScheduler.class);
 
   @Test
   public void dispatchesMessagesReceivedAfterRegisteringCallback() throws Exception {
@@ -309,7 +311,8 @@ public class RequestManagerTest {
         EthProtocolConfiguration.DEFAULT_MAX_MESSAGE_SIZE,
         TestClock.fixed(),
         Collections.emptyList(),
-        Bytes.random(64));
+        Bytes.random(64),
+        ethScheduler);
   }
 
   @Test

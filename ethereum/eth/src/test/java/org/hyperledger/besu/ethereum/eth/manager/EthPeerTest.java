@@ -62,6 +62,8 @@ public class EthPeerTest {
       Bytes.fromHexString(
           "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010");
 
+  private final EthScheduler ethScheduler = mock(EthScheduler.class);
+
   @Test
   public void getHeadersStream() throws PeerNotConnected {
     final ResponseStreamSupplier getStream =
@@ -483,7 +485,8 @@ public class EthPeerTest {
         EthProtocolConfiguration.DEFAULT_MAX_MESSAGE_SIZE,
         clock,
         Collections.emptyList(),
-        Bytes.random(64));
+        Bytes.random(64),
+        ethScheduler);
   }
 
   private MockPeerConnection.PeerSendHandler getFailOnSend() {
@@ -519,7 +522,8 @@ public class EthPeerTest {
         EthProtocolConfiguration.DEFAULT_MAX_MESSAGE_SIZE,
         clock,
         permissioningProviders,
-        Bytes.random(64));
+        Bytes.random(64),
+        ethScheduler);
   }
 
   private PeerConnection getPeerConnection(final MockPeerConnection.PeerSendHandler onSend) {

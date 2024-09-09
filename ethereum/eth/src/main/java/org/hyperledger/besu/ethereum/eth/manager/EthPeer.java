@@ -43,6 +43,7 @@ import org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.DisconnectMessage.Di
 import org.hyperledger.besu.plugin.services.permissioning.NodeMessagePermissioningProvider;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -67,6 +68,7 @@ public class EthPeer implements Comparable<EthPeer> {
   private static final Logger LOG = LoggerFactory.getLogger(EthPeer.class);
 
   private static final int MAX_OUTSTANDING_REQUESTS = 5;
+  private final EthScheduler ethScheduler;
 
   private PeerConnection connection;
 
@@ -121,6 +123,8 @@ public class EthPeer implements Comparable<EthPeer> {
     roundMessages.put(SnapV1.TRIE_NODES, SnapV1.GET_TRIE_NODES);
   }
 
+  private boolean giveBusyPeerARest = false;
+
   @VisibleForTesting
   public EthPeer(
       final PeerConnection connection,
@@ -130,7 +134,8 @@ public class EthPeer implements Comparable<EthPeer> {
       final int maxMessageSize,
       final Clock clock,
       final List<NodeMessagePermissioningProvider> permissioningProviders,
-      final Bytes localNodeId) {
+      final Bytes localNodeId,
+      final EthScheduler ethScheduler) {
     this.connection = connection;
     this.protocolName = protocolName;
     this.maxMessageSize = maxMessageSize;
@@ -143,6 +148,7 @@ public class EthPeer implements Comparable<EthPeer> {
     this.requestManagers = new ConcurrentHashMap<>();
     this.localNodeId = localNodeId;
     this.id = connection.getPeer().getId();
+    this.ethScheduler = ethScheduler;
 
     initEthRequestManagers();
     initSnapRequestManagers();
@@ -225,6 +231,10 @@ public class EthPeer implements Comparable<EthPeer> {
         .addArgument(requestType)
         .addArgument(this::getLoggableId)
         .log();
+    if (reputation.getScore() > 110) {
+      giveBusyPeerARest = true;
+      ethScheduler.scheduleFutureTask(() -> giveBusyPeerARest = false, Duration.ofSeconds(5));
+    }
     reputation.recordUselessResponse(System.currentTimeMillis(), this).ifPresent(this::disconnect);
   }
 
@@ -616,6 +626,9 @@ public class EthPeer implements Comparable<EthPeer> {
   }
 
   public boolean hasAvailableRequestCapacity() {
+    if (giveBusyPeerARest) {
+      return false;
+    }
     return outstandingRequests() < MAX_OUTSTANDING_REQUESTS;
   }
 

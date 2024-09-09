@@ -15,11 +15,13 @@
 package org.hyperledger.besu.ethereum.eth.manager.ethtaskutils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 import org.hyperledger.besu.ethereum.eth.EthProtocol;
 import org.hyperledger.besu.ethereum.eth.EthProtocolConfiguration;
 import org.hyperledger.besu.ethereum.eth.manager.EthPeer;
 import org.hyperledger.besu.ethereum.eth.manager.EthProtocolManagerTestUtil;
+import org.hyperledger.besu.ethereum.eth.manager.EthScheduler;
 import org.hyperledger.besu.ethereum.eth.manager.MockPeerConnection;
 import org.hyperledger.besu.ethereum.eth.manager.RespondingEthPeer;
 import org.hyperledger.besu.ethereum.eth.manager.exceptions.EthTaskException;
@@ -47,6 +49,9 @@ import org.junit.jupiter.api.Test;
  */
 public abstract class PeerMessageTaskTest<T>
     extends AbstractMessageTaskTest<T, AbstractPeerTask.PeerTaskResult<T>> {
+
+  private final EthScheduler ethScheduler = mock(EthScheduler.class);
+
   @Test
   public void completesWhenPeerReturnsPartialResult() {
     // Setup a partially responsive peer
@@ -168,6 +173,7 @@ public abstract class PeerMessageTaskTest<T>
         EthProtocolConfiguration.DEFAULT_MAX_MESSAGE_SIZE,
         TestClock.fixed(),
         Collections.emptyList(),
-        Bytes.random(64));
+        Bytes.random(64),
+        ethScheduler);
   }
 }

@@ -118,6 +118,7 @@ public class EthPeers {
   private boolean snapServerPeersNeeded = false;
   private Supplier<TrailingPeerRequirements> trailingPeerRequirementsSupplier =
       () -> TrailingPeerRequirements.UNRESTRICTED;
+  private EthScheduler ethScheduler;
 
   public EthPeers(
       final String protocolName,
@@ -186,16 +187,18 @@ public class EthPeers {
                 .filter(p -> p.getId().equals(id))
                 .findFirst();
         ethPeer =
-            peerInList.orElse(
-                new EthPeer(
-                    newConnection,
-                    protocolName,
-                    this::ethPeerStatusExchanged,
-                    peerValidators,
-                    maxMessageSize,
-                    clock,
-                    permissioningProviders,
-                    localNodeId));
+            peerInList.orElseGet(
+                () ->
+                    new EthPeer(
+                        newConnection,
+                        protocolName,
+                        this::ethPeerStatusExchanged,
+                        peerValidators,
+                        maxMessageSize,
+                        clock,
+                        permissioningProviders,
+                        localNodeId,
+                        ethScheduler));
       }
       incompleteConnections.put(newConnection, ethPeer);
     }
@@ -463,6 +466,10 @@ public class EthPeers {
   public void setTrailingPeerRequirementsSupplier(
       final Supplier<TrailingPeerRequirements> tprSupplier) {
     this.trailingPeerRequirementsSupplier = tprSupplier;
+  }
+
+  public void ethContext(final EthContext ethContext) {
+    this.ethScheduler = ethContext.getScheduler();
   }
 
   @FunctionalInterface
