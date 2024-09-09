@@ -34,7 +34,7 @@ import org.slf4j.LoggerFactory;
 
 public class RecursivePeerRefreshState {
   private static final Logger LOG = LoggerFactory.getLogger(RecursivePeerRefreshState.class);
-  private static final int MAX_CONCURRENT_REQUESTS = 3;
+  private static final int MAX_CONCURRENT_REQUESTS = 1;
   private Bytes target;
   private final PeerDiscoveryPermissions peerPermissions;
   private final PeerTable peerTable;
