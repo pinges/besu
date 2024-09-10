@@ -16,7 +16,6 @@ package org.hyperledger.besu.ethereum.eth.manager;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.DisconnectMessage.DisconnectReason.TIMEOUT;
-import static org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.DisconnectMessage.DisconnectReason.USELESS_PEER_USELESS_RESPONSES;
 import static org.mockito.Mockito.mock;
 
 import org.hyperledger.besu.ethereum.eth.messages.EthPV62;
@@ -66,25 +65,6 @@ public class PeerReputationTest {
   }
 
   @Test
-  public void shouldOnlyDisconnectWhenEmptyResponseThresholdReached() {
-    sendUselessResponses(1001, PeerReputation.USELESS_RESPONSE_THRESHOLD - 1);
-    assertThat(reputation.recordUselessResponse(1005, mockEthPeer))
-        .contains(USELESS_PEER_USELESS_RESPONSES);
-  }
-
-  @Test
-  public void shouldDiscardEmptyResponseRecordsAfterTimeWindowElapses() {
-    // Bring it to the brink of disconnection.
-    sendUselessResponses(1001, PeerReputation.USELESS_RESPONSE_THRESHOLD - 1);
-
-    // But then the next empty response doesn't come in until after the window expires on the first
-    assertThat(
-            reputation.recordUselessResponse(
-                1001 + PeerReputation.USELESS_RESPONSE_WINDOW_IN_MILLIS + 1, mockEthPeer))
-        .isEmpty();
-  }
-
-  @Test
   public void shouldIncreaseScore() {
     reputation.recordUsefulResponse();
     assertThat(reputation.getScore()).isGreaterThan(INITIAL_SCORE);
@@ -101,12 +81,6 @@ public class PeerReputationTest {
   private void sendRequestTimeouts(final int requestType, final int repeatCount) {
     for (int i = 0; i < repeatCount; i++) {
       assertThat(reputation.recordRequestTimeout(requestType, mockEthPeer)).isEmpty();
-    }
-  }
-
-  private void sendUselessResponses(final long timestamp, final int repeatCount) {
-    for (int i = 0; i < repeatCount; i++) {
-      assertThat(reputation.recordUselessResponse(timestamp + i, mockEthPeer)).isEmpty();
     }
   }
 }

@@ -91,22 +91,12 @@ public class PeerReputation implements Comparable<PeerReputation> {
     return timeoutCountByRequestType;
   }
 
-  public Optional<DisconnectReason> recordUselessResponse(
-      final long timestamp, final EthPeer peer) {
+  public void recordUselessResponse(final long timestamp) {
     uselessResponseTimes.add(timestamp);
     while (shouldRemove(uselessResponseTimes.peek(), timestamp)) {
       uselessResponseTimes.poll();
     }
-    if (uselessResponseTimes.size() >= USELESS_RESPONSE_THRESHOLD) {
-      score -= LARGE_ADJUSTMENT;
-      LOG.debug(
-          "Disconnection triggered by exceeding useless response threshold for peer {}",
-          peer.getLoggableId());
-      return Optional.of(DisconnectReason.USELESS_PEER_USELESS_RESPONSES);
-    } else {
-      score -= SMALL_ADJUSTMENT;
-      return Optional.empty();
-    }
+    score -= LARGE_ADJUSTMENT;
   }
 
   public void recordUsefulResponse() {

@@ -69,6 +69,7 @@ public class EthPeer implements Comparable<EthPeer> {
 
   private static final int MAX_OUTSTANDING_REQUESTS = 5;
   private final EthScheduler ethScheduler;
+  private final PeerRestInfo peerRestInfo;
 
   private PeerConnection connection;
 
@@ -149,6 +150,8 @@ public class EthPeer implements Comparable<EthPeer> {
     this.localNodeId = localNodeId;
     this.id = connection.getPeer().getId();
     this.ethScheduler = ethScheduler;
+
+    this.peerRestInfo = new PeerRestInfo();
 
     initEthRequestManagers();
     initSnapRequestManagers();
@@ -231,11 +234,21 @@ public class EthPeer implements Comparable<EthPeer> {
         .addArgument(requestType)
         .addArgument(this::getLoggableId)
         .log();
-    if (reputation.getScore() > 110) {
+    if (giveBusyPeerARest) {
+      return;
+    } else {
       giveBusyPeerARest = true;
-      ethScheduler.scheduleFutureTask(() -> giveBusyPeerARest = false, Duration.ofSeconds(5));
+      final long nextRestDuration;
+      try {
+        nextRestDuration = peerRestInfo.getNextRestDuration();
+      } catch (UselessPeerException e) {
+        disconnect(DisconnectReason.USELESS_PEER_USELESS_RESPONSES);
+        return;
+      }
+      ethScheduler.scheduleFutureTask(
+          () -> giveBusyPeerARest = false, Duration.ofMillis(nextRestDuration));
+      reputation.recordUselessResponse(clock.millis());
     }
-    reputation.recordUselessResponse(System.currentTimeMillis(), this).ifPresent(this::disconnect);
   }
 
   public void recordUsefulResponse() {
@@ -736,4 +749,32 @@ public class EthPeer implements Comparable<EthPeer> {
   public interface DisconnectCallback {
     void onDisconnect(EthPeer peer);
   }
+
+  /**
+   * A class providing the next rest duration for a peer returning empty responses.
+   *
+   * <p>The first time we get an empty response from a peer, we wait 10ms before sending the next
+   * request. Following empty responses will double the wait time each time. If the wait time
+   * exceeds 80 seconds, the peer is considered useless and will be disconnected.
+   */
+  private class PeerRestInfo {
+    long lastRestTimestamp = clock.millis();
+    long waitDuration;
+
+    long getNextRestDuration() throws UselessPeerException {
+      if (clock.millis() - lastRestTimestamp > 100000) {
+        lastRestTimestamp = clock.millis();
+        waitDuration = 10;
+        return waitDuration;
+      }
+      this.lastRestTimestamp = clock.millis();
+      waitDuration = waitDuration * 2;
+      if (waitDuration > 80000) {
+        throw new UselessPeerException();
+      }
+      return waitDuration;
+    }
+  }
+
+  private static class UselessPeerException extends Exception {}
 }
