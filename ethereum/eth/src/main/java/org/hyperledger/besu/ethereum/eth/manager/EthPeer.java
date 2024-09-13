@@ -249,8 +249,8 @@ public class EthPeer implements Comparable<EthPeer> {
       }
       ethScheduler.scheduleFutureTask(
           () -> giveBusyPeerARest = false, Duration.ofMillis(nextRestDuration));
-      reputation.recordUselessResponse(clock.millis());
     }
+    reputation.recordUselessResponse(clock.millis());
   }
 
   public void recordUsefulResponse() {
@@ -755,9 +755,9 @@ public class EthPeer implements Comparable<EthPeer> {
   /**
    * A class providing the next rest duration for a peer returning empty responses.
    *
-   * <p>The first time we get an empty response from a peer, we wait 10ms before sending the next
+   * <p>The first time we get an empty response from a peer, we wait 10s before sending the next
    * request. Following empty responses will double the wait time each time. If the wait time
-   * exceeds 80 seconds, the peer is considered useless and will be disconnected.
+   * exceeds 80s, the peer is considered useless and will be disconnected.
    */
   private class PeerRestInfo {
     long lastRestTimestamp;

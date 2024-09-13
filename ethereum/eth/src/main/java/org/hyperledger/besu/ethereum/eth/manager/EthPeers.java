@@ -187,18 +187,17 @@ public class EthPeers {
                 .filter(p -> p.getId().equals(id))
                 .findFirst();
         ethPeer =
-            peerInList.orElseGet(
-                () ->
-                    new EthPeer(
-                        newConnection,
-                        protocolName,
-                        this::ethPeerStatusExchanged,
-                        peerValidators,
-                        maxMessageSize,
-                        clock,
-                        permissioningProviders,
-                        localNodeId,
-                        ethScheduler));
+            peerInList.orElse(
+                new EthPeer(
+                    newConnection,
+                    protocolName,
+                    this::ethPeerStatusExchanged,
+                    peerValidators,
+                    maxMessageSize,
+                    clock,
+                    permissioningProviders,
+                    localNodeId,
+                    ethScheduler));
       }
       incompleteConnections.put(newConnection, ethPeer);
     }
