@@ -234,14 +234,16 @@ public class EthPeer implements Comparable<EthPeer> {
         .addArgument(requestType)
         .addArgument(this::getLoggableId)
         .log();
-    if (giveBusyPeerARest) {
-      return;
-    } else {
+    if (!giveBusyPeerARest) {
       giveBusyPeerARest = true;
       final long nextRestDuration;
       try {
         nextRestDuration = peerRestInfo.getNextRestDuration();
       } catch (UselessPeerException e) {
+        LOG.atDebug()
+            .setMessage("Disconnecting peer {} due to useless responses")
+            .addArgument(this::getLoggableId)
+            .log();
         disconnect(DisconnectReason.USELESS_PEER_USELESS_RESPONSES);
         return;
       }
@@ -758,21 +760,22 @@ public class EthPeer implements Comparable<EthPeer> {
    * exceeds 80 seconds, the peer is considered useless and will be disconnected.
    */
   private class PeerRestInfo {
-    long lastRestTimestamp = clock.millis();
+    long lastRestTimestamp;
     long waitDuration;
 
     long getNextRestDuration() throws UselessPeerException {
-      if (clock.millis() - lastRestTimestamp > 100000) {
+      if (waitDuration == 80000 && clock.millis() - lastRestTimestamp > 110000) {
         lastRestTimestamp = clock.millis();
-        waitDuration = 10;
+        waitDuration = 10000;
+        return waitDuration;
+      } else {
+        waitDuration = waitDuration * 2;
+        if (waitDuration > 80000) {
+          throw new UselessPeerException();
+        }
+        this.lastRestTimestamp = clock.millis();
         return waitDuration;
       }
-      this.lastRestTimestamp = clock.millis();
-      waitDuration = waitDuration * 2;
-      if (waitDuration > 80000) {
-        throw new UselessPeerException();
-      }
-      return waitDuration;
     }
   }
 
