@@ -208,15 +208,16 @@ public class TransactionReceipt implements org.hyperledger.besu.plugin.data.Tran
 
   public void writeToForReceiptTrie(
       final RLPOutput rlpOutput, final boolean withRevertReason, final boolean compacted) {
+
+    if (!transactionType.equals(TransactionType.FRONTIER)) {
+      rlpOutput.writeIntScalar(transactionType.getSerializedType());
+    }
+
     if (rlp != null && !compacted) {
       // at this point we can ignore withRevertReason, because we would only have the rlp if the
       // receipt was received via p2p, which means the receipt does not contain the revert reason.
       rlpOutput.writeRaw(rlp);
       return;
-    }
-
-    if (!transactionType.equals(TransactionType.FRONTIER)) {
-      rlpOutput.writeIntScalar(transactionType.getSerializedType());
     }
 
     rlpOutput.startList();
@@ -312,7 +313,7 @@ public class TransactionReceipt implements org.hyperledger.besu.plugin.data.Tran
 
     Bytes rlpBytes = null;
     if (keepRlp) {
-      rlpBytes = rlpInput.raw();
+      rlpBytes = input.raw();
     }
 
     // Status code-encoded transaction receipts have a single
@@ -395,10 +396,6 @@ public class TransactionReceipt implements org.hyperledger.besu.plugin.data.Tran
   @Override
   public Optional<Bytes> getRevertReason() {
     return revertReason;
-  }
-
-  public Optional<Bytes> getRlp() {
-    return Optional.ofNullable(rlp);
   }
 
   @Override
