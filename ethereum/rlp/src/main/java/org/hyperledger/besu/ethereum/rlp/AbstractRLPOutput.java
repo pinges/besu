@@ -96,6 +96,14 @@ abstract class AbstractRLPOutput implements RLPOutput {
   }
 
   @Override
+  public void appendRaw(final Bytes v) {
+    values.add(v);
+    // Mark that last value added as already encoded.
+    rlpEncoded.set(values.size() - 1);
+    payloadSizes[currentList()] += v.size();
+  }
+
+  @Override
   public void startList() {
     values.add(LIST_MARKER);
     ++listsCount; // we'll add a new element to payloadSizes

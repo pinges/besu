@@ -302,6 +302,10 @@ public interface RLPOutput {
    */
   void writeRaw(Bytes bytes);
 
+  default void appendRaw(Bytes bytes) {
+    // do nothing by default
+  }
+
   /**
    * Check if the incoming value is 0 and writes it as 0x80, per the spec.
    *
