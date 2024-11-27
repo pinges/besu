@@ -300,9 +300,9 @@ public interface RLPOutput {
    *
    * @param bytes An already RLP encoded value to write as next item of this output.
    */
-  void writeRaw(Bytes bytes);
+  void writeRaw(final Bytes bytes);
 
-  default void appendRaw(Bytes bytes) {
+  default void appendRaw(final Bytes bytes) {
     // do nothing by default
   }
 
