@@ -18,6 +18,7 @@ import static java.util.Collections.emptyList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.ExecutionEngineJsonRpcMethod.EngineStatus.INVALID;
 import static org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType.INVALID_PARAMS;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -38,6 +39,7 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.RpcMethod;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequest;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.EnginePayloadParameter;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.WithdrawalParameterTestFixture;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcError;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
@@ -53,6 +55,8 @@ import org.hyperledger.besu.ethereum.core.encoding.TransactionEncoder;
 import org.hyperledger.besu.ethereum.mainnet.BodyValidation;
 import org.hyperledger.besu.ethereum.mainnet.CancunTargetingGasLimitCalculator;
 import org.hyperledger.besu.ethereum.mainnet.ValidationResult;
+import org.hyperledger.besu.ethereum.mainnet.WithdrawalsValidator;
+import org.hyperledger.besu.ethereum.mainnet.requests.ProhibitedRequestValidator;
 import org.hyperledger.besu.evm.gascalculator.CancunGasCalculator;
 import org.hyperledger.besu.metrics.noop.NoOpMetricsSystem;
 
@@ -138,6 +142,54 @@ public class EngineNewPayloadV3Test extends EngineNewPayloadV2Test {
     final EnginePayloadStatusResult res = fromSuccessResp(badParam);
     assertThat(res.getStatusAsString()).isEqualTo(INVALID.name());
     assertThat(res.getError()).isEqualTo("Invalid versionedHash");
+  }
+
+  @Test
+  public void shouldFailWhenRequestParameterSent() {
+    final Bytes validVersionedHash = Bytes.fromHexString("0x" + "01".repeat(32));
+    final Bytes validBeaconBlockRoot = Bytes.fromHexString("0x" + "02".repeat(32));
+
+    final EnginePayloadParameter payload = mock(EnginePayloadParameter.class);
+    when(payload.getTimestamp()).thenReturn(cancunHardfork.milestone());
+    when(payload.getExcessBlobGas()).thenReturn("99");
+    when(payload.getBlobGasUsed()).thenReturn(9L);
+    when(payload.getWithdrawals())
+        .thenReturn(List.of(WithdrawalParameterTestFixture.WITHDRAWAL_PARAM_1));
+    when(payload.getBlockNumber()).thenReturn(20000000L);
+    when(payload.getExtraData()).thenReturn("0x1234");
+
+    when(protocolSchedule.getByBlockHeader(any())).thenReturn(protocolSpec);
+    when(protocolSpec.getWithdrawalsValidator())
+        .thenReturn(new WithdrawalsValidator.AllowedWithdrawals());
+    when(protocolSpec.getRequestsValidator()).thenReturn(new ProhibitedRequestValidator());
+
+    // TODO locking this as V3 otherwise this breaks the EngineNewPayloadV4Test subclass when method
+    // field is V4
+    final EngineNewPayloadV3 methodV3 =
+        new EngineNewPayloadV3(
+            vertx,
+            protocolSchedule,
+            protocolContext,
+            mergeCoordinator,
+            ethPeers,
+            engineCallListener,
+            new NoOpMetricsSystem());
+    final JsonRpcResponse badParam =
+        methodV3.response(
+            new JsonRpcRequestContext(
+                new JsonRpcRequest(
+                    "2.0",
+                    RpcMethod.ENGINE_NEW_PAYLOAD_V3.getMethodName(),
+                    new Object[] {
+                      payload,
+                      List.of(validVersionedHash.toHexString()),
+                      validBeaconBlockRoot.toHexString(),
+                      List.of("0x0122", "0x0233") // request parameter should not be sent
+                    })));
+    final JsonRpcError res = fromErrorResp(badParam);
+    System.out.println(res);
+    assertThat(res.getCode()).isEqualTo(-32602);
+    assertThat(res.getMessage()).isEqualTo("Invalid execution requests params");
   }
 
   @Test
