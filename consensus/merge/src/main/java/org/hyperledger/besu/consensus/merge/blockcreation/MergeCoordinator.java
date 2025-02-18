@@ -678,18 +678,20 @@ public class MergeCoordinator implements MergeMiningCoordinator, BadChainListene
 
   private boolean moveWorldStateTo(final BlockHeader newHead) {
     Optional<MutableWorldState> newWorldState =
-        protocolContext
+        // TODO: should create checkpoint when needed!
+            protocolContext
             .getWorldStateArchive()
             .getWorldState(withBlockHeaderAndUpdateNodeHead(newHead));
 
     newWorldState.ifPresentOrElse(
-        mutableWorldState ->
-            LOG.atDebug()
-                .setMessage(
-                    "World state for state root hash {} and block hash {} persisted successfully")
-                .addArgument(mutableWorldState::rootHash)
-                .addArgument(newHead::getHash)
-                .log(),
+        mutableWorldState -> {
+          LOG.atDebug()
+                  .setMessage(
+                          "World state for state root hash {} and block hash {} persisted successfully")
+                  .addArgument(mutableWorldState::rootHash)
+                  .addArgument(newHead::getHash)
+                  .log();
+        },
         () ->
             LOG.error(
                 "Could not persist world for root hash {} and block hash {}",

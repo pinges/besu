@@ -232,7 +232,7 @@ public abstract class DiffBasedWorldStateProvider implements WorldStateArchive {
         .map(MutableWorldState::freezeStorage);
   }
 
-  private Optional<MutableWorldState> rollFullWorldStateToBlockHash(
+  private Optional<MutableWorldState> rollFullWorldStateToBlockHash( // TODO: HERE????
       final DiffBasedWorldState mutableState, final Hash blockHash) {
     if (blockHash.equals(mutableState.blockHash())) {
       return Optional.of(mutableState);

@@ -142,6 +142,8 @@ public abstract class AbstractEngineForkchoiceUpdated extends ExecutionEngineJso
               maybeNewHead.get(),
               forkChoice.getFinalizedBlockHash(),
               forkChoice.getSafeBlockHash());
+
+      // TODO: take a checkpoint here every 10 Blocks
     }
 
     Optional<List<Withdrawal>> withdrawals = Optional.empty();
