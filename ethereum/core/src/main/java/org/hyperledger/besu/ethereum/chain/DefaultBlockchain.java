@@ -637,6 +637,15 @@ public class DefaultBlockchain implements MutableBlockchain {
     BlockWithReceipts currentOldChainWithReceipts = oldChainWithReceipts;
     BlockWithReceipts currentNewChainWithReceipts = newChainHeadWithReceipts;
 
+    LOG.info(
+        "Stefan: handle reorg: New chain head: {}, hash {}",
+        newChainHeadWithReceipts.getNumber(),
+        newChainHeadWithReceipts.getHash());
+    LOG.info(
+        "Stefan: Reorging to block {}, hash {}",
+        currentOldChainWithReceipts.getNumber(),
+        currentOldChainWithReceipts.getHash());
+
     // Update chain head
     updater.setChainHead(currentNewChainWithReceipts.getHeader().getHash());
 
