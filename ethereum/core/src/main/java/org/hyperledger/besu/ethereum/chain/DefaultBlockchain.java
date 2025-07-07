@@ -571,13 +571,19 @@ public class DefaultBlockchain implements MutableBlockchain {
 
     try {
       if (newBlock.getHeader().getParentHash().equals(chainHead) || chainHead == null) {
+        LOG.info("S: Block {}, {}, is the next chain head {}",
+            newBlock.getHeader().getNumber(), newBlock.getHeader().getBlockHash(), chainHeader.getNumber());
         return handleNewHead(updater, blockWithReceipts, transactionIndexing);
-      } else if (blockChoiceRule.compare(newBlock.getHeader(), chainHeader) > 0) {
-        // New block represents a chain reorganization
-        return handleChainReorg(updater, blockWithReceipts);
       } else {
-        // New block represents a fork
-        return handleFork(updater, newBlock);
+        LOG.info("S: Block {}, {}, is NOT the next chain head {}",
+            newBlock.getHeader().getNumber(), newBlock.getHeader().getBlockHash(), chainHeader.getNumber());
+        if (blockChoiceRule.compare(newBlock.getHeader(), chainHeader) > 0) {
+          // New block represents a chain reorganization
+          return handleChainReorg(updater, blockWithReceipts);
+        } else {
+          // New block represents a fork
+          return handleFork(updater, newBlock);
+        }
       }
     } catch (final NoSuchElementException e) {
       // Any Optional.get() calls in this block should be present, missing data means data
@@ -636,15 +642,6 @@ public class DefaultBlockchain implements MutableBlockchain {
     final BlockWithReceipts oldChainWithReceipts = getBlockWithReceipts(chainHeader).get();
     BlockWithReceipts currentOldChainWithReceipts = oldChainWithReceipts;
     BlockWithReceipts currentNewChainWithReceipts = newChainHeadWithReceipts;
-
-    LOG.info(
-        "Stefan: handle reorg: New chain head: {}, hash {}",
-        newChainHeadWithReceipts.getNumber(),
-        newChainHeadWithReceipts.getHash());
-    LOG.info(
-        "Stefan: Reorging to block {}, hash {}",
-        currentOldChainWithReceipts.getNumber(),
-        currentOldChainWithReceipts.getHash());
 
     // Update chain head
     updater.setChainHead(currentNewChainWithReceipts.getHeader().getHash());
