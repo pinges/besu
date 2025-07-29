@@ -30,7 +30,6 @@ import org.hyperledger.besu.ethereum.eth.manager.EthScheduler;
 import org.hyperledger.besu.ethereum.eth.sync.DownloadHeadersStep;
 import org.hyperledger.besu.ethereum.eth.sync.DownloadPipelineFactory;
 import org.hyperledger.besu.ethereum.eth.sync.DownloadSyncBodiesStep;
-import org.hyperledger.besu.ethereum.eth.sync.SavePreMergeHeadersStep;
 import org.hyperledger.besu.ethereum.eth.sync.SynchronizerConfiguration;
 import org.hyperledger.besu.ethereum.eth.sync.fastsync.checkpoint.Checkpoint;
 import org.hyperledger.besu.ethereum.eth.sync.fullsync.SyncTerminationCondition;
@@ -141,9 +140,10 @@ public class FastSyncDownloadPipelineFactory implements DownloadPipelineFactory 
             headerRequestSize,
             metricsSystem);
     final RangeHeadersValidationStep validateHeadersJoinUpStep =
-        new RangeHeadersValidationStep(protocolSchedule, protocolContext, detachedValidationPolicy);
-    final SavePreMergeHeadersStep savePreMergeHeadersStep =
-        new SavePreMergeHeadersStep(
+        new RangeHeadersValidationStep(
+            protocolSchedule,
+            protocolContext,
+            detachedValidationPolicy,
             protocolContext.getBlockchain(),
             protocolSchedule.anyMatch(s -> s.spec().isPoS()),
             getCheckpointBlockNumber(syncState),
@@ -174,8 +174,7 @@ public class FastSyncDownloadPipelineFactory implements DownloadPipelineFactory 
             "fastSync")
         .thenProcessAsyncOrdered("downloadHeaders", downloadHeadersStep, downloaderParallelism)
         .thenFlatMap("validateHeadersJoin", validateHeadersJoinUpStep, singleHeaderBufferSize)
-        .thenFlatMap("savePreMergeHeadersStep", savePreMergeHeadersStep, singleHeaderBufferSize)
-        .inBatches(headerRequestSize)
+        .inBatches(64)
         .thenProcessAsyncOrdered(
             "downloadSyncBodies", downloadSyncBodiesStep, downloaderParallelism)
         .thenProcessAsyncOrdered(
