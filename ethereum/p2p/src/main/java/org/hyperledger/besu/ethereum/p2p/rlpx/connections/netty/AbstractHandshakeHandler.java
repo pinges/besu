@@ -106,7 +106,7 @@ abstract class AbstractHandshakeHandler extends SimpleChannelInboundHandler<Byte
       final Bytes nodeId = handshaker.partyPubKey().getEncodedBytes();
       if (!localNode.isReady()) {
         // If we're handling a connection before the node is fully up, just disconnect
-        LOG.debug("Rejecting connection because local node is not ready {}", nodeId);
+        LOG.info("Stefan 5 Rejecting connection because local node is not ready {}", nodeId);
         disconnect(ctx, DisconnectMessage.DisconnectReason.UNKNOWN);
         return;
       }

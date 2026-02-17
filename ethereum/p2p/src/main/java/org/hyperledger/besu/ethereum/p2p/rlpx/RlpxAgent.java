@@ -311,15 +311,16 @@ public class RlpxAgent {
     final Peer peer = peerConnection.getPeer();
     // Deny connection if our local node isn't ready
     if (!localNode.isReady()) {
-      LOG.debug("Node is not ready. Disconnect incoming connection: {}", peerConnection);
+      LOG.info("Stefan 2 Node is not ready. Disconnect incoming connection: {}", peerConnection);
       peerConnection.disconnect(DisconnectReason.UNKNOWN);
       return;
     }
 
     // Disconnect if not permitted
     if (!peerPermissions.allowNewInboundConnectionFrom(peer)) {
-      LOG.debug(
-          "Node is not permitted to connect. Disconnect incoming connection: {}", peerConnection);
+      LOG.info(
+          "Stefan 3 Node is not permitted to connect. Disconnect incoming connection: {}",
+          peerConnection);
       peerConnection.disconnect(DisconnectReason.UNKNOWN);
       return;
     }
@@ -327,6 +328,9 @@ public class RlpxAgent {
     if (checkWhetherToConnect(peer, true)) {
       dispatchConnect(peerConnection);
     } else {
+      Log.info(
+          "Stefan 4 Peer is not permitted to connect. Disconnect incoming connection: {}",
+          peerConnection);
       peerConnection.disconnect(DisconnectReason.UNKNOWN);
     }
   }

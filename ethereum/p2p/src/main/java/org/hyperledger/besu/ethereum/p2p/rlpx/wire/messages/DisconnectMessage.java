@@ -27,8 +27,12 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 import org.apache.tuweni.bytes.Bytes;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class DisconnectMessage extends AbstractMessageData {
+
+  private static final Logger LOG = LoggerFactory.getLogger(DisconnectMessage.class);
 
   private DisconnectMessage(final Bytes data) {
     super(data);
@@ -91,6 +95,10 @@ public final class DisconnectMessage extends AbstractMessageData {
           reasonData.size() == 1
               ? DisconnectReason.forCode(reasonData.get(0))
               : DisconnectReason.UNKNOWN;
+
+      if (reasonData.size() == 1) {
+        LOG.info("Stefan 6 reason data size not 1 from peer, reason RLP: {}", in.raw());
+      }
 
       return new Data(reason);
     }
@@ -173,6 +181,7 @@ public final class DisconnectMessage extends AbstractMessageData {
     public static DisconnectReason forCode(final Byte code) {
       if (code == null || code < 0 || !BY_ID.containsKey(code)) {
         // Be permissive and just return unknown if the disconnect reason is bad
+        LOG.info("Stefan 7 Unknown disconnect reason code {}", code);
         return UNKNOWN;
       }
       return BY_ID.get(code);
@@ -180,6 +189,7 @@ public final class DisconnectMessage extends AbstractMessageData {
 
     public static DisconnectReason forCode(final Bytes codeBytes) {
       if (codeBytes == null || codeBytes.isEmpty()) {
+        LOG.info("Stefan 8 Unknown disconnect reason code empty of null");
         return UNKNOWN;
       } else {
         return forCode(codeBytes.get(0));

@@ -95,6 +95,11 @@ final class ApiHandler extends SimpleChannelInboundHandler<MessageData> {
                 connection.getPeerInfo(),
                 e);
           }
+          if (reason == DisconnectMessage.DisconnectReason.UNKNOWN) {
+            LOG.info(
+                "Stefan 1 Received unknown Wire DISCONNECT from peer: {}, with ",
+                connection.getPeerInfo());
+          }
           connection.terminateConnection(reason, true);
       }
       return;

@@ -50,6 +50,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -394,6 +395,13 @@ public class EthProtocolManager implements ProtocolManager, MinedBlockObserver {
         .addArgument(ethPeers::peerCount)
         .log();
     LOG.atTrace().setMessage("{}").addArgument(ethPeers::toString).log();
+    if (connection.getPeerInfo().getClientId().toLowerCase(Locale.ROOT).contains("besu")) {
+      LOG.info(
+          "Stefan 9 Disconnecting BESU peer {} with reason {}. Initiated by peer: {}",
+          connection.getPeerInfo().getClientId(),
+          reason,
+          initiatedByPeer ? "Inbound" : "Outbound");
+    }
   }
 
   private void handleStatusMessage(final EthPeer peer, final Message message) {
