@@ -397,10 +397,11 @@ public class EthProtocolManager implements ProtocolManager, MinedBlockObserver {
     LOG.atTrace().setMessage("{}").addArgument(ethPeers::toString).log();
     if (connection.getPeerInfo().getClientId().toLowerCase(Locale.ROOT).contains("besu")) {
       LOG.info(
-          "Stefan 9 Disconnecting BESU peer {} with reason {}. Initiated by peer: {}",
+          "Stefan 9 Disconnecting BESU peer {} with reason {}. Initiated by peer: {} with node id: {}",
           connection.getPeerInfo().getClientId(),
           reason,
-          initiatedByPeer ? "Inbound" : "Outbound");
+          initiatedByPeer ? "Inbound" : "Outbound",
+          connection.getPeer().getLoggableId());
     }
   }
 
