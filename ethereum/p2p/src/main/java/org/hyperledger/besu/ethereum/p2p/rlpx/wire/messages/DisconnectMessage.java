@@ -96,7 +96,7 @@ public final class DisconnectMessage extends AbstractMessageData {
               ? DisconnectReason.forCode(reasonData.get(0))
               : DisconnectReason.UNKNOWN;
 
-      if (reasonData.size() == 1) {
+      if (reasonData.size() != 1) {
         LOG.info("Stefan 6 reason data size not 1 from peer, reason RLP: {}", in.raw());
       }
 

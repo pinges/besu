@@ -23,6 +23,7 @@ import org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.PongMessage;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.WireMessageCodes;
 import org.hyperledger.besu.ethereum.rlp.RLPException;
 
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.netty.channel.ChannelHandlerContext;
@@ -95,7 +96,8 @@ final class ApiHandler extends SimpleChannelInboundHandler<MessageData> {
                 connection.getPeerInfo(),
                 e);
           }
-          if (reason == DisconnectMessage.DisconnectReason.UNKNOWN) {
+          if (reason == DisconnectMessage.DisconnectReason.UNKNOWN
+              && connection.getPeerInfo().toString().toLowerCase(Locale.ROOT).contains("besu")) {
             LOG.info(
                 "Stefan 1 Received unknown Wire DISCONNECT from peer: {}, with ",
                 connection.getPeerInfo());

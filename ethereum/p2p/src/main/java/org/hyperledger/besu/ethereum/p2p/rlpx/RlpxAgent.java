@@ -40,6 +40,7 @@ import org.hyperledger.besu.util.Subscribers;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentMap;
@@ -311,16 +312,20 @@ public class RlpxAgent {
     final Peer peer = peerConnection.getPeer();
     // Deny connection if our local node isn't ready
     if (!localNode.isReady()) {
-      LOG.info("Stefan 2 Node is not ready. Disconnect incoming connection: {}", peerConnection);
+      if (peerConnection.getPeerInfo().toString().toLowerCase(Locale.ROOT).contains("besu")) {
+        LOG.info("Stefan 2 Node is not ready. Disconnect incoming connection: {}", peerConnection);
+      }
       peerConnection.disconnect(DisconnectReason.UNKNOWN);
       return;
     }
 
     // Disconnect if not permitted
     if (!peerPermissions.allowNewInboundConnectionFrom(peer)) {
-      LOG.info(
-          "Stefan 3 Node is not permitted to connect. Disconnect incoming connection: {}",
-          peerConnection);
+      if (peerConnection.getPeerInfo().toString().toLowerCase(Locale.ROOT).contains("besu")) {
+        LOG.info(
+            "Stefan 3 Node is not permitted to connect. Disconnect incoming connection: {}",
+            peerConnection);
+      }
       peerConnection.disconnect(DisconnectReason.UNKNOWN);
       return;
     }
@@ -328,9 +333,11 @@ public class RlpxAgent {
     if (checkWhetherToConnect(peer, true)) {
       dispatchConnect(peerConnection);
     } else {
-      Log.info(
-          "Stefan 4 Peer is not permitted to connect. Disconnect incoming connection: {}",
-          peerConnection);
+      if (peerConnection.getPeerInfo().toString().toLowerCase(Locale.ROOT).contains("besu")) {
+        LOG.info(
+            "Stefan 4 Peer is not permitted to connect. Disconnect incoming connection: {}",
+            peerConnection);
+      }
       peerConnection.disconnect(DisconnectReason.UNKNOWN);
     }
   }
