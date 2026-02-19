@@ -253,7 +253,7 @@ public class EthPeers implements PeerSelector {
         peer.handleDisconnect();
         abortPendingRequestsAssignedToDisconnectedPeers();
         if (peer.getReputation().getScore() > USEFULL_PEER_SCORE_THRESHOLD) {
-          LOG.atDebug().setMessage("Disconnected USEFUL peer {}").addArgument(peer).log();
+          LOG.atInfo().setMessage("Disconnected USEFUL peer {}").addArgument(peer).log();
         } else {
           LOG.atDebug()
               .setMessage("Disconnected EthPeer {}")
@@ -428,7 +428,7 @@ public class EthPeers implements PeerSelector {
     if (peer.getForkId().isPresent()) {
       final ForkId forkId = peer.getForkId().get();
       if (!forkIdManager.peerCheck(forkId)) {
-        LOG.atDebug()
+        LOG.atInfo()
             .setMessage("Wrong fork id, not trying to connect to peer {}")
             .addArgument(peer::getId)
             .log();
@@ -439,7 +439,7 @@ public class EthPeers implements PeerSelector {
 
     final Bytes id = peer.getId();
     if (alreadyConnectedOrConnecting(inbound, id)) {
-      LOG.atTrace()
+      LOG.atInfo()
           .setMessage("not connecting to peer {} - already connected")
           .addArgument(peer.getLoggableId())
           .log();

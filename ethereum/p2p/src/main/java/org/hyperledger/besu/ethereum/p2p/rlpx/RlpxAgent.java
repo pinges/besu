@@ -227,7 +227,7 @@ public class RlpxAgent {
     } else {
       final String errorMsg =
           "None of the ProtocolManagers wants to connect to peer " + peer.getId();
-      LOG.trace(errorMsg);
+      LOG.info(errorMsg);
       return CompletableFuture.failedFuture((new RuntimeException(errorMsg)));
     }
 
@@ -313,7 +313,9 @@ public class RlpxAgent {
     // Deny connection if our local node isn't ready
     if (!localNode.isReady()) {
       if (peerConnection.getPeerInfo().toString().toLowerCase(Locale.ROOT).contains("besu")) {
-        LOG.info("Stefan 2 Node is not ready. Disconnect incoming connection: {}", peerConnection);
+        LOG.info(
+            "Stefan 2 Node is not ready. Disconnect incoming connection: {}",
+            peerConnection.getRemoteEnode());
       }
       peerConnection.disconnect(DisconnectReason.UNKNOWN);
       return;
@@ -324,7 +326,7 @@ public class RlpxAgent {
       if (peerConnection.getPeerInfo().toString().toLowerCase(Locale.ROOT).contains("besu")) {
         LOG.info(
             "Stefan 3 Node is not permitted to connect. Disconnect incoming connection: {}",
-            peerConnection);
+            peerConnection.getRemoteEnode());
       }
       peerConnection.disconnect(DisconnectReason.UNKNOWN);
       return;
@@ -336,7 +338,7 @@ public class RlpxAgent {
       if (peerConnection.getPeerInfo().toString().toLowerCase(Locale.ROOT).contains("besu")) {
         LOG.info(
             "Stefan 4 Peer is not permitted to connect. Disconnect incoming connection: {}",
-            peerConnection);
+            peerConnection.getRemoteEnode());
       }
       peerConnection.disconnect(DisconnectReason.UNKNOWN);
     }

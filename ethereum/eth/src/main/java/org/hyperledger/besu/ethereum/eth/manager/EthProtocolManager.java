@@ -396,12 +396,15 @@ public class EthProtocolManager implements ProtocolManager, MinedBlockObserver {
         .log();
     LOG.atTrace().setMessage("{}").addArgument(ethPeers::toString).log();
     if (connection.getPeerInfo().getClientId().toLowerCase(Locale.ROOT).contains("besu")) {
-      LOG.info(
-          "Stefan 9 Disconnecting BESU peer {} with reason {}. Initiated by peer: {} with node id: {}",
-          connection.getPeerInfo().getClientId(),
-          reason,
-          initiatedByPeer ? "Inbound" : "Outbound",
-          connection.getPeer().getLoggableId());
+      LOG.atInfo()
+          .setMessage("Disconnect - active Connection? {} - {} - {} - {} {} - {} peers left")
+          .addArgument(wasActiveConnection)
+          .addArgument(initiatedByPeer ? "Inbound" : "Outbound")
+          .addArgument(reason::toString)
+          .addArgument(() -> connection.getPeer().getLoggableId())
+          .addArgument(() -> connection.getPeerInfo().getClientId())
+          .addArgument(ethPeers::peerCount)
+          .log();
     }
   }
 
