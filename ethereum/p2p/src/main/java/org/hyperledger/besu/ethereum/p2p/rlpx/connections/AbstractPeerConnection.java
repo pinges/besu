@@ -204,6 +204,13 @@ public abstract class AbstractPeerConnection implements PeerConnection {
       try {
         // send the disconnect message first, in case the dispatchDisconnect throws an exception
         doSend(null, DisconnectMessage.create(reason));
+        if (reason == DisconnectReason.UNKNOWN
+            && peerInfo.toString().toLowerCase(java.util.Locale.ROOT).contains("besu")) {
+          LOG.info(
+              "Stefan 6 Sending UNKNOWN disconnect to Besu peer: {}",
+              peerInfo,
+              new Exception("Call site stack trace"));
+        }
         LOG.atDebug()
             .setMessage("Disconnecting connection {}, peer {} reason {}")
             .addArgument(this.hashCode())
