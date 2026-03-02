@@ -65,6 +65,13 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
 
   private static final Logger LOG = LoggerFactory.getLogger(SnapWorldDownloadState.class);
 
+  /**
+   * Maximum combined size of downstream queues (storage, largeStorage, code) before the account
+   * pipeline pauses to let them drain. This replaces the previous all-or-nothing blocking that
+   * required every downstream task to complete before fetching the next account range.
+   */
+  private static final int MAX_PENDING_REQUESTS_BEFORE_ACCOUNT_BLOCKING = 200;
+
   protected final InMemoryTaskQueue<SnapDataRequest> pendingAccountRequests =
       new InMemoryTaskQueue<>();
   protected final InMemoryTaskQueue<SnapDataRequest> pendingStorageRequests =
@@ -384,9 +391,55 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
     return null;
   }
 
+  /**
+   * Dequeues a request from the given queue, blocking only when the combined size of the
+   * backpressure queues exceeds the specified threshold. Unlike {@link #dequeueRequestBlocking},
+   * this does not require all downstream tasks to complete — it only pauses when downstream queues
+   * are too backed up, allowing the caller to stay ahead of downstream processing.
+   */
+  public synchronized Task<SnapDataRequest> dequeueRequestBlockingWithBackpressure(
+      final List<TaskCollection<SnapDataRequest>> backpressureQueues,
+      final int maxPendingBeforeBlocking,
+      final TaskCollection<SnapDataRequest> queue,
+      final Consumer<Void> unBlocked) {
+    boolean isWaiting = false;
+    while (!internalFuture.isDone()) {
+      while (combinedSize(backpressureQueues) > maxPendingBeforeBlocking) {
+        try {
+          isWaiting = true;
+          wait();
+        } catch (final InterruptedException e) {
+          Thread.currentThread().interrupt();
+          return null;
+        }
+      }
+      if (isWaiting) {
+        unBlocked.accept(null);
+      }
+      isWaiting = false;
+      Task<SnapDataRequest> task = queue.remove();
+      if (task != null) {
+        return task;
+      }
+
+      try {
+        wait();
+      } catch (final InterruptedException e) {
+        Thread.currentThread().interrupt();
+        return null;
+      }
+    }
+    return null;
+  }
+
+  private long combinedSize(final List<TaskCollection<SnapDataRequest>> queues) {
+    return queues.stream().mapToLong(TaskCollection::size).sum();
+  }
+
   public synchronized Task<SnapDataRequest> dequeueAccountRequestBlocking() {
-    return dequeueRequestBlocking(
+    return dequeueRequestBlockingWithBackpressure(
         List.of(pendingStorageRequests, pendingLargeStorageRequests, pendingCodeRequests),
+        MAX_PENDING_REQUESTS_BEFORE_ACCOUNT_BLOCKING,
         pendingAccountRequests,
         unused -> snapContext.updatePersistedTasks(pendingAccountRequests.asList()));
   }
@@ -400,7 +453,7 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
   }
 
   public synchronized Task<SnapDataRequest> dequeueCodeRequestBlocking() {
-    return dequeueRequestBlocking(List.of(pendingStorageRequests), pendingCodeRequests, __ -> {});
+    return dequeueRequestBlocking(Collections.emptyList(), pendingCodeRequests, __ -> {});
   }
 
   public synchronized Task<SnapDataRequest> dequeueTrieNodeRequestBlocking() {
