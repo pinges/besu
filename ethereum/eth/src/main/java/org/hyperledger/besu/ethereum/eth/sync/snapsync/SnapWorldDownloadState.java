@@ -180,60 +180,46 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
         && pendingAccountFlatDatabaseHealingRequests.allTasksCompleted()
         && pendingStorageFlatDatabaseHealingRequests.allTasksCompleted()) {
 
-      // if all snapsync tasks are completed and the healing process was not running
+      // Phase 1: Start trie healing if not started yet
       if (!snapSyncState.isHealTrieInProgress()) {
-        // Start the healing process
         startTrieHeal();
       }
-      // if all snapsync tasks are completed and the healing was running and blockchain is behind
-      // the pivot block
-      else if (pivotBlockSelector.isBlockchainBehind()) {
-        LOG.debug("Pausing world state download while waiting for chain sync to complete");
-        // Set the snapsync to wait for the blockchain to catch up
-        snapSyncState.setWaitingBlockchain(true);
-      }
-      // if all snapsync tasks are completed and the healing was running and the blockchain is not
-      // behind the pivot block
-      else {
-        // Notify that world state heal has finished
+      // Phase 2: Trie heal done → start flat DB heal immediately (don't wait for chain)
+      else if (!snapSyncState.isHealFlatDatabaseInProgress()
+          && (worldStateStorageCoordinator.isMatchingFlatMode(FlatDbMode.FULL)
+              || worldStateStorageCoordinator.isMatchingFlatMode(FlatDbMode.ARCHIVE))) {
         notifyWorldStateHealFinished();
-
+        syncDurationMetrics.stopTimer(SyncDurationMetrics.Labels.SNAP_WORLD_STATE_HEALING_DURATION);
+        startFlatDatabaseHeal(header);
+      }
+      // Phase 3: Flat DB heal done or not needed → finalize
+      else {
+        notifyWorldStateHealFinished();
         syncDurationMetrics.stopTimer(SyncDurationMetrics.Labels.SNAP_WORLD_STATE_HEALING_DURATION);
 
-        // If the flat database healing process is not in progress and the flat database mode is
-        // FULL
-        if (!snapSyncState.isHealFlatDatabaseInProgress()
-            && (worldStateStorageCoordinator.isMatchingFlatMode(FlatDbMode.FULL)
-                || worldStateStorageCoordinator.isMatchingFlatMode(FlatDbMode.ARCHIVE))) {
-          startFlatDatabaseHeal(header);
-        }
-        // If the flat database healing process is in progress or the flat database mode is not FULL
-        else {
-          final WorldStateKeyValueStorage.Updater updater = worldStateStorageCoordinator.updater();
-          applyForStrategy(
-              updater,
-              onBonsai -> {
-                onBonsai.saveWorldState(
-                    header.getHash().getBytes(),
-                    Bytes32.wrap(header.getStateRoot().getBytes()),
-                    rootNodeData);
-              },
-              onForest -> {
-                onForest.saveWorldState(
-                    Bytes32.wrap(header.getStateRoot().getBytes()), rootNodeData);
-              });
-          updater.commit();
+        final WorldStateKeyValueStorage.Updater updater = worldStateStorageCoordinator.updater();
+        applyForStrategy(
+            updater,
+            onBonsai -> {
+              onBonsai.saveWorldState(
+                  header.getHash().getBytes(),
+                  Bytes32.wrap(header.getStateRoot().getBytes()),
+                  rootNodeData);
+            },
+            onForest -> {
+              onForest.saveWorldState(Bytes32.wrap(header.getStateRoot().getBytes()), rootNodeData);
+            });
+        updater.commit();
 
-          // Remove the blockchain observer
-          blockchain.removeObserver(blockObserverId);
-          // Notify that the snap sync has completed
-          metricsManager.notifySnapSyncCompleted();
-          // Clear the snap context
-          snapContext.clear();
-          internalFuture.complete(null);
+        // Remove the blockchain observer
+        blockchain.removeObserver(blockObserverId);
+        // Notify that the snap sync has completed
+        metricsManager.notifySnapSyncCompleted();
+        // Clear the snap context
+        snapContext.clear();
+        internalFuture.complete(null);
 
-          return true;
-        }
+        return true;
       }
     }
     return false;
@@ -531,6 +517,7 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
                           && !pivotBlockSelector.isBlockchainBehind();
 
                   if (snapSyncState.isHealTrieInProgress()
+                      && !snapSyncState.isHealFlatDatabaseInProgress()
                       && (isNewPivotBlockFound || isBlockchainCaughtUp)) {
                     snapSyncState.setWaitingBlockchain(false);
                     reloadTrieHeal();

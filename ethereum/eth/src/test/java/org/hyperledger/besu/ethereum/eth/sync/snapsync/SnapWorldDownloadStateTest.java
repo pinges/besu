@@ -395,19 +395,14 @@ public class SnapWorldDownloadStateTest {
 
   @ParameterizedTest
   @ArgumentsSource(SnapWorldDownloadStateTestArguments.class)
-  public void shouldStopWaitingBlockchainWhenNewPivotBlockAvailable(
+  public void shouldReloadTrieHealWhenNewPivotBlockAvailableDuringTrieHeal(
       final DataStorageFormat storageFormat, final boolean isFlatDbHealingEnabled) {
     setUp(storageFormat);
 
     when(snapSyncState.isHealTrieInProgress()).thenReturn(true);
+    when(snapSyncState.isHealFlatDatabaseInProgress()).thenReturn(false);
 
     downloadState.setPivotBlockSelector(dynamicPivotBlockManager);
-    when(dynamicPivotBlockManager.isBlockchainBehind()).thenReturn(true);
-
-    downloadState.checkCompletion(header);
-
-    verify(snapSyncState).setWaitingBlockchain(true);
-    when(snapSyncState.isWaitingBlockchain()).thenReturn(true);
 
     final BlockHeaderTestFixture blockHeaderTestFixture = new BlockHeaderTestFixture();
     final BlockHeader newPivotBlock = blockHeaderTestFixture.number(550L).buildHeader();
@@ -437,34 +432,38 @@ public class SnapWorldDownloadStateTest {
             Collections.emptyList(),
             Collections.emptyList()));
 
-    // reload heal
-    verify(snapSyncState).setWaitingBlockchain(false);
+    // reloadTrieHeal should be triggered during trie healing
     verify(snapSyncState).setHealTrieStatus(false);
   }
 
   @ParameterizedTest
   @ArgumentsSource(SnapWorldDownloadStateTestArguments.class)
-  public void shouldStopWaitingBlockchainWhenCloseToTheHead(
+  public void shouldNotReloadTrieHealWhenFlatDatabaseHealInProgress(
       final DataStorageFormat storageFormat, final boolean isFlatDbHealingEnabled) {
     setUp(storageFormat);
 
     when(snapSyncState.isHealTrieInProgress()).thenReturn(true);
+    when(snapSyncState.isHealFlatDatabaseInProgress()).thenReturn(true);
 
     downloadState.setPivotBlockSelector(dynamicPivotBlockManager);
 
-    when(dynamicPivotBlockManager.isBlockchainBehind()).thenReturn(true);
-
-    downloadState.checkCompletion(header);
-
-    verify(snapSyncState).setWaitingBlockchain(true);
-    when(snapSyncState.isWaitingBlockchain()).thenReturn(true);
+    final BlockHeaderTestFixture blockHeaderTestFixture = new BlockHeaderTestFixture();
+    final BlockHeader newPivotBlock = blockHeaderTestFixture.number(550L).buildHeader();
+    doAnswer(
+            invocation -> {
+              BiConsumer<BlockHeader, Boolean> callback =
+                  invocation.getArgument(0, BiConsumer.class);
+              callback.accept(newPivotBlock, true);
+              return null;
+            })
+        .when(dynamicPivotBlockManager)
+        .check(any());
 
     final Block newBlock =
         new Block(
             new BlockHeaderTestFixture().number(500).buildHeader(),
             new BlockBody(emptyList(), emptyList()));
 
-    when(dynamicPivotBlockManager.isBlockchainBehind()).thenReturn(false);
     when(snapSyncState.getPivotBlockHeader()).thenReturn(Optional.of(newBlock.getHeader()));
 
     final BlockAddedObserver blockAddedListener = downloadState.createBlockchainObserver();
@@ -472,8 +471,8 @@ public class SnapWorldDownloadStateTest {
         BlockAddedEvent.createForHeadAdvancement(
             newBlock, Collections.emptyList(), Collections.emptyList()));
 
-    verify(snapSyncState).setWaitingBlockchain(false);
-    verify(snapSyncState).setHealTrieStatus(false);
+    // reloadTrieHeal should NOT be triggered when flat DB heal is in progress
+    verify(snapSyncState, times(0)).setHealTrieStatus(false);
   }
 
   @ParameterizedTest
