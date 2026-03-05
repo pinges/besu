@@ -25,7 +25,6 @@ import org.hyperledger.besu.ethereum.eth.sync.fastsync.PivotUpdateListener;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
@@ -78,11 +77,9 @@ public class DynamicPivotBlockSelector {
 
   public void check(final BiConsumer<BlockHeader, Boolean> onNewPivotBlock) {
     if (isTimeToCheckAgain.compareAndSet(true, false)) {
-      AtomicBoolean delayNextCheck = new AtomicBoolean(false);
-
       syncState
           .getPivotBlockNumber()
-          .ifPresent(
+          .ifPresentOrElse(
               currentPivotBlockNumber -> {
                 final long bestChainHeight = syncActions.getBestChainHeight();
                 final long distanceNextPivotBlock =
@@ -118,43 +115,36 @@ public class DynamicPivotBlockSelector {
                                   return CompletableFuture.completedFuture(null);
                                 }
                                 return downloadNewPivotBlock(fss);
-                              })
-                          .whenComplete(
-                              (unused, throwable) -> {
-                                if (throwable != null) {
-                                  LOG.debug("Error while searching for a new pivot", throwable);
-                                }
                               });
                 } else {
                   searchForNewPivot = CompletableFuture.completedFuture(null);
                 }
 
-                try {
-                  searchForNewPivot
-                      .thenRun(
-                          () -> {
-                            final long distance = bestChainHeight - currentPivotBlockNumber;
-                            if (distance > pivotBlockWindowValidity) {
-                              LOG.atDebug()
-                                  .setMessage(
-                                      "Switch to new pivot: current pivot {} is distant {} from current best chain height {} last pivot block found {}")
-                                  .addArgument(currentPivotBlockNumber)
-                                  .addArgument(distance)
-                                  .addArgument(bestChainHeight)
-                                  .addArgument(this::logLastPivotBlockFound)
-                                  .log();
-                              switchToNewPivotBlock(onNewPivotBlock);
-                            }
-                            // delay next check only if we are successful
-                            delayNextCheck.set(true);
-                          })
-                      .get();
-                } catch (InterruptedException | ExecutionException e) {
-                  LOG.debug("Exception while searching for new pivot", e);
-                }
-              });
-
-      scheduleNextCheck(delayNextCheck.get());
+                searchForNewPivot
+                    .thenRun(
+                        () -> {
+                          final long distance = bestChainHeight - currentPivotBlockNumber;
+                          if (distance > pivotBlockWindowValidity) {
+                            LOG.atDebug()
+                                .setMessage(
+                                    "Switch to new pivot: current pivot {} is distant {} from current best chain height {} last pivot block found {}")
+                                .addArgument(currentPivotBlockNumber)
+                                .addArgument(distance)
+                                .addArgument(bestChainHeight)
+                                .addArgument(this::logLastPivotBlockFound)
+                                .log();
+                            switchToNewPivotBlock(onNewPivotBlock);
+                          }
+                        })
+                    .whenComplete(
+                        (result, error) -> {
+                          if (error != null) {
+                            LOG.debug("Error while searching for a new pivot", error);
+                          }
+                          scheduleNextCheck(error == null);
+                        });
+              },
+              () -> scheduleNextCheck(false));
     }
   }
 

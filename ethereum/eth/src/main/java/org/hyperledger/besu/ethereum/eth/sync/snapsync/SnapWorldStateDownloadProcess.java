@@ -425,9 +425,11 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   "batchDownloadFlatAccountData",
                   requestTask -> requestDataStep.requestLocalFlatAccounts(requestTask),
                   maxOutstandingRequests)
-              .thenProcess(
+              .thenProcessAsync(
                   "batchHealAndPersistFlatAccountData",
-                  task -> persistDataStep.healFlatDatabase(task))
+                  task ->
+                      CompletableFuture.supplyAsync(() -> persistDataStep.healFlatDatabase(task)),
+                  maxOutstandingRequests)
               .andFinishWith("batchFlatAccountDataDownloaded", requestsToComplete::put);
 
       final Pipeline<Task<SnapDataRequest>> storageFlatDatabaseHealingPipeline =
@@ -440,13 +442,15 @@ public class SnapWorldStateDownloadProcess implements WorldStateDownloadProcess 
                   outputCounter,
                   true,
                   "world_state_heal")
-              .thenProcessAsyncOrdered(
+              .thenProcessAsync(
                   "batchDownloadFlatStorageData",
                   requestTask -> requestDataStep.requestLocalFlatStorages(requestTask),
                   maxOutstandingRequests)
-              .thenProcess(
+              .thenProcessAsync(
                   "batchHealAndPersistFlatStorageData",
-                  task -> persistDataStep.healFlatDatabase(task))
+                  task ->
+                      CompletableFuture.supplyAsync(() -> persistDataStep.healFlatDatabase(task)),
+                  maxOutstandingRequests)
               .andFinishWith("batchFlatStorageDataDownloaded", requestsToComplete::put);
 
       return new SnapWorldStateDownloadProcess(
