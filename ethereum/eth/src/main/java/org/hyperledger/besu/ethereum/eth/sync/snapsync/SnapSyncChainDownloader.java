@@ -618,9 +618,13 @@ public class SnapSyncChainDownloader
         chainSyncStateStorage.storeState(chainSyncState.get());
 
         return CompletableFuture.completedFuture(true); // Need to continue
+      } else if (worldStateHealFinishedFuture.isDone()) {
+        // Frozen pivot matches what we already synced to — we're done
+        LOG.info("Pivot unchanged and world state heal finished, chain download complete");
+        return CompletableFuture.completedFuture(false);
       } else {
         LOG.error(
-            "The pivot block number has not increased, even though onPivotUpdated() has been called. previous pivot: {}, updated pivot: {}",
+            "Pivot not increased and world state heal not finished. previous: {}, updated: {}",
             previousPivot.getNumber(),
             updatedPivot != null ? updatedPivot.getNumber() : "null");
         throw new IllegalStateException("The pivot block number has not increased");

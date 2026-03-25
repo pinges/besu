@@ -193,6 +193,29 @@ public class SnapSyncChainDownloaderTest {
   }
 
   @Test
+  public void shouldCompleteWhenFrozenPivotMatchesInitialPivot() {
+    SnapSyncChainDownloader downloader =
+        new SnapSyncChainDownloader(
+            pipelineFactory,
+            protocolSchedule,
+            protocolContext,
+            ethContext,
+            syncState,
+            syncDurationMetrics,
+            pivotBlockHeader,
+            chainSyncStateStorage,
+            headerDownloader);
+
+    // Simulate: frozen pivot == initial pivot (no change during trie heal)
+    // First signal world state heal finished, then send the same pivot
+    downloader.onWorldStateHealFinished();
+    downloader.onPivotUpdated(pivotBlockHeader);
+
+    // The onPivotUpdated with same number should not throw since worldStateHealFinished is done
+    assertThatCode(() -> downloader.onPivotUpdated(pivotBlockHeader)).doesNotThrowAnyException();
+  }
+
+  @Test
   public void shouldHandleStateTransitionFromInitialToHeadersComplete() {
     // Create and store initial state
     ChainSyncState initialState =

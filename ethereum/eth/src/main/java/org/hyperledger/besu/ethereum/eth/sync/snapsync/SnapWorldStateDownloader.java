@@ -216,7 +216,6 @@ public class SnapWorldStateDownloader implements WorldStateDownloader {
               ethContext,
               fastSyncActions,
               snapSyncState,
-              fastSyncActions.getChainDownloaderListener(),
               snapSyncConfiguration.getPivotBlockWindowValidity(),
               snapSyncConfiguration.getPivotBlockDistanceBeforeCaching());
 
@@ -258,6 +257,7 @@ public class SnapWorldStateDownloader implements WorldStateDownloader {
       if (chainDownloader != null) {
         chainDownloader.setWorldDownloadState(newDownloadState);
         newDownloadState.setWorldStateHealFinishedListener(chainDownloader);
+        newDownloadState.setPivotUpdateListener(chainDownloader);
         LOG.debug("Wired bidirectional references between chain and world state downloaders");
       }
 

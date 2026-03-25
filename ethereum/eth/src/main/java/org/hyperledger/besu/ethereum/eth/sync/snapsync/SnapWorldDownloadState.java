@@ -22,6 +22,7 @@ import org.hyperledger.besu.ethereum.chain.BlockAddedObserver;
 import org.hyperledger.besu.ethereum.chain.Blockchain;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.eth.manager.EthContext;
+import org.hyperledger.besu.ethereum.eth.sync.common.PivotUpdateListener;
 import org.hyperledger.besu.ethereum.eth.sync.common.WorldStateHealFinishedListener;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.context.SnapSyncStatePersistenceManager;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.AccountRangeDataRequest;
@@ -84,6 +85,8 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
   private Set<Bytes> accountsHealingList = new HashSet<>();
   private DynamicPivotBlockSelector pivotBlockSelector;
   private WorldStateHealFinishedListener worldStateHealFinishedListener;
+  private PivotUpdateListener pivotUpdateListener;
+  private BlockHeader trieHealPivotHeader;
 
   private final SnapSyncStatePersistenceManager snapContext;
   private final SnapSyncProcessState snapSyncState;
@@ -178,17 +181,20 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
         // Start the healing process
         startTrieHeal();
       }
-      // if all snapsync tasks are completed and the healing was running and blockchain is behind
-      // the pivot block
-      else if (pivotBlockSelector.isBlockchainBehind()) {
-        LOG.debug("Pausing world state download while waiting for chain sync to complete");
-        // Set the snapsync to wait for the blockchain to catch up
-        snapSyncState.setWaitingBlockchain(true);
-      }
-      // if all snapsync tasks are completed and the healing was running and the blockchain is not
-      // behind the pivot block
+      // if all snapsync tasks are completed and the healing was running
       else {
-        // Notify that world state heal has finished
+        final boolean wasFrozen = snapSyncState.isPivotFrozen();
+        if (trieHealPivotHeader == null) {
+          throw new IllegalStateException(
+              "Trie heal completed but no pivot header was set during healing");
+        }
+        final BlockHeader frozenHeader = snapSyncState.freezePivot(trieHealPivotHeader);
+
+        // Notify chain downloader of the final pivot — only once, when first frozen
+        if (!wasFrozen && pivotUpdateListener != null) {
+          pivotUpdateListener.onPivotUpdated(frozenHeader);
+        }
+
         notifyWorldStateHealFinished();
 
         syncDurationMetrics.stopTimer(SyncDurationMetrics.Labels.SNAP_WORLD_STATE_HEALING_DURATION);
@@ -198,7 +204,7 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
         if (!snapSyncState.isHealFlatDatabaseInProgress()
             && (worldStateStorageCoordinator.isMatchingFlatMode(FlatDbMode.FULL)
                 || worldStateStorageCoordinator.isMatchingFlatMode(FlatDbMode.ARCHIVE))) {
-          startFlatDatabaseHeal(header);
+          startFlatDatabaseHeal(frozenHeader);
         }
         // If the flat database healing process is in progress or the flat database mode is not FULL
         else {
@@ -207,13 +213,13 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
               updater,
               onBonsai -> {
                 onBonsai.saveWorldState(
-                    header.getHash().getBytes(),
-                    Bytes32.wrap(header.getStateRoot().getBytes()),
+                    frozenHeader.getHash().getBytes(),
+                    Bytes32.wrap(frozenHeader.getStateRoot().getBytes()),
                     rootNodeData);
               },
               onForest -> {
                 onForest.saveWorldState(
-                    Bytes32.wrap(header.getStateRoot().getBytes()), rootNodeData);
+                    Bytes32.wrap(frozenHeader.getStateRoot().getBytes()), rootNodeData);
               });
           updater.commit();
 
@@ -256,6 +262,7 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
     pivotBlockSelector.switchToNewPivotBlock(
         (blockHeader, newPivotBlockFound) -> {
           snapContext.clearAccountRangeTasks();
+          trieHealPivotHeader = blockHeader;
           LOG.info(
               "Running world state heal process from peers with pivot block {}",
               blockHeader.getNumber());
@@ -267,7 +274,16 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
 
   /** Method to reload the healing process of the trie */
   public synchronized void reloadTrieHeal() {
-    // Clear the flat database and trie log from the world state storage if needed
+    // Before clearing anything, check if trie heal is already complete.
+    // If so, checkCompletion will freeze the pivot and start flat DB heal.
+    if (trieHealPivotHeader != null) {
+      checkCompletion(trieHealPivotHeader);
+      if (snapSyncState.isPivotFrozen()) {
+        return;
+      }
+    }
+
+    // Trie heal not done — proceed with restart for new pivot
     worldStateStorageCoordinator.applyOnMatchingStrategies(
         List.of(DataStorageFormat.BONSAI, DataStorageFormat.X_BONSAI_ARCHIVE),
         worldStateKeyValueStorage -> {
@@ -285,7 +301,7 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
   }
 
   public synchronized void startFlatDatabaseHeal(final BlockHeader header) {
-    LOG.info("Initiating the healing process for the flat database");
+    LOG.info("Initiating the healing process for the flat database with pivot block {}", header);
     syncDurationMetrics.startTimer(SyncDurationMetrics.Labels.FLAT_DB_HEAL);
     snapSyncState.setHealFlatDatabaseInProgress(true);
     final Map<Bytes32, Bytes32> ranges = RangeManager.generateAllRanges(16);
@@ -445,6 +461,10 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
     this.worldStateHealFinishedListener = listener;
   }
 
+  public void setPivotUpdateListener(final PivotUpdateListener listener) {
+    this.pivotUpdateListener = listener;
+  }
+
   /**
    * Notifies the registered listener that world state heal has finished. Once the state heal has
    * finished no new pivot blocks are selected. This notification is sent only once.
@@ -472,14 +492,9 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest> 
                         }
                       });
 
-                  final boolean isNewPivotBlockFound = foundNewPivotBlock.get();
-                  final boolean isBlockchainCaughtUp =
-                      snapSyncState.isWaitingBlockchain()
-                          && !pivotBlockSelector.isBlockchainBehind();
-
-                  if (snapSyncState.isHealTrieInProgress()
-                      && (isNewPivotBlockFound || isBlockchainCaughtUp)) {
-                    snapSyncState.setWaitingBlockchain(false);
+                  if (foundNewPivotBlock.get()
+                      && snapSyncState.isHealTrieInProgress()
+                      && !snapSyncState.isPivotFrozen()) {
                     reloadTrieHeal();
                   }
                 });

@@ -20,6 +20,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,6 +37,7 @@ import org.hyperledger.besu.ethereum.core.InMemoryKeyValueStorageProvider;
 import org.hyperledger.besu.ethereum.eth.manager.EthContext;
 import org.hyperledger.besu.ethereum.eth.manager.EthScheduler;
 import org.hyperledger.besu.ethereum.eth.manager.task.EthTask;
+import org.hyperledger.besu.ethereum.eth.sync.common.PivotUpdateListener;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.context.SnapSyncStatePersistenceManager;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.BytecodeRequest;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.SnapDataRequest;
@@ -152,6 +154,9 @@ public class SnapWorldDownloadStateTest {
         .switchToNewPivotBlock(any());
     downloadState.setPivotBlockSelector(dynamicPivotBlockManager);
     downloadState.setRootNodeData(ROOT_NODE_DATA);
+    when(snapSyncState.isPivotFrozen()).thenReturn(false);
+    when(snapSyncState.freezePivot(any(BlockHeader.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
     future = downloadState.getDownloadFuture();
     assertThat(downloadState.isDownloading()).isTrue();
 
@@ -395,19 +400,14 @@ public class SnapWorldDownloadStateTest {
 
   @ParameterizedTest
   @ArgumentsSource(SnapWorldDownloadStateTestArguments.class)
-  public void shouldStopWaitingBlockchainWhenNewPivotBlockAvailable(
+  public void shouldReloadTrieHealFromObserverWhenNewPivotBlockAvailable(
       final DataStorageFormat storageFormat, final boolean isFlatDbHealingEnabled) {
     setUp(storageFormat);
 
     when(snapSyncState.isHealTrieInProgress()).thenReturn(true);
+    when(snapSyncState.getPivotBlockHeader()).thenReturn(Optional.of(header));
 
     downloadState.setPivotBlockSelector(dynamicPivotBlockManager);
-    when(dynamicPivotBlockManager.isBlockchainBehind()).thenReturn(true);
-
-    downloadState.checkCompletion(header);
-
-    verify(snapSyncState).setWaitingBlockchain(true);
-    when(snapSyncState.isWaitingBlockchain()).thenReturn(true);
 
     final BlockHeaderTestFixture blockHeaderTestFixture = new BlockHeaderTestFixture();
     final BlockHeader newPivotBlock = blockHeaderTestFixture.number(550L).buildHeader();
@@ -421,13 +421,6 @@ public class SnapWorldDownloadStateTest {
         .when(dynamicPivotBlockManager)
         .check(any());
 
-    final Block newBlock =
-        new Block(
-            new BlockHeaderTestFixture().number(500).buildHeader(),
-            new BlockBody(emptyList(), emptyList()));
-
-    when(snapSyncState.getPivotBlockHeader()).thenReturn(Optional.of(newBlock.getHeader()));
-
     final BlockAddedObserver blockAddedListener = downloadState.createBlockchainObserver();
     blockAddedListener.onBlockAdded(
         BlockAddedEvent.createForHeadAdvancement(
@@ -437,42 +430,7 @@ public class SnapWorldDownloadStateTest {
             Collections.emptyList(),
             Collections.emptyList()));
 
-    // reload heal
-    verify(snapSyncState).setWaitingBlockchain(false);
-    verify(snapSyncState).setHealTrieStatus(false);
-  }
-
-  @ParameterizedTest
-  @ArgumentsSource(SnapWorldDownloadStateTestArguments.class)
-  public void shouldStopWaitingBlockchainWhenCloseToTheHead(
-      final DataStorageFormat storageFormat, final boolean isFlatDbHealingEnabled) {
-    setUp(storageFormat);
-
-    when(snapSyncState.isHealTrieInProgress()).thenReturn(true);
-
-    downloadState.setPivotBlockSelector(dynamicPivotBlockManager);
-
-    when(dynamicPivotBlockManager.isBlockchainBehind()).thenReturn(true);
-
-    downloadState.checkCompletion(header);
-
-    verify(snapSyncState).setWaitingBlockchain(true);
-    when(snapSyncState.isWaitingBlockchain()).thenReturn(true);
-
-    final Block newBlock =
-        new Block(
-            new BlockHeaderTestFixture().number(500).buildHeader(),
-            new BlockBody(emptyList(), emptyList()));
-
-    when(dynamicPivotBlockManager.isBlockchainBehind()).thenReturn(false);
-    when(snapSyncState.getPivotBlockHeader()).thenReturn(Optional.of(newBlock.getHeader()));
-
-    final BlockAddedObserver blockAddedListener = downloadState.createBlockchainObserver();
-    blockAddedListener.onBlockAdded(
-        BlockAddedEvent.createForHeadAdvancement(
-            newBlock, Collections.emptyList(), Collections.emptyList()));
-
-    verify(snapSyncState).setWaitingBlockchain(false);
+    // reload heal should be triggered
     verify(snapSyncState).setHealTrieStatus(false);
   }
 
@@ -509,6 +467,108 @@ public class SnapWorldDownloadStateTest {
                 Bytes.EMPTY, Bytes32.wrap(ROOT_NODE_HASH.getBytes())))
         .isEmpty();
     assertThat(downloadState.isDownloading()).isTrue();
+  }
+
+  @ParameterizedTest
+  @ArgumentsSource(SnapWorldDownloadStateTestArguments.class)
+  public void shouldNotClearFlatDbWhenReloadTrieHealCalledAfterPivotFrozen(
+      final DataStorageFormat storageFormat, final boolean isFlatDbHealingEnabled) {
+    setUp(storageFormat);
+    when(snapSyncState.getPivotBlockHeader()).thenReturn(Optional.of(header));
+    // Step 1: Start trie heal (sets trieHealPivotHeader internally)
+    when(snapSyncState.isHealTrieInProgress()).thenReturn(false);
+    downloadState.checkCompletion(header);
+    verify(snapSyncState).setHealTrieStatus(true);
+
+    // Step 2: Simulate pivot is already frozen (e.g. trie heal completed on another path)
+    when(snapSyncState.isPivotFrozen()).thenReturn(true);
+
+    // Add some pending requests to verify they are NOT cleared
+    downloadState.pendingTrieNodeRequests.add(
+        BytecodeRequest.createAccountTrieNodeDataRequest(Hash.EMPTY, Bytes.EMPTY, new HashSet<>()));
+    downloadState.pendingCodeRequests.add(
+        BytecodeRequest.createBytecodeRequest(Bytes32.ZERO, Hash.EMPTY, Bytes32.ZERO));
+
+    // Step 3: reloadTrieHeal should detect trieHealPivotHeader != null,
+    // call checkCompletion (which won't enter branches since queues aren't empty),
+    // then see isPivotFrozen → return early without clearing
+    downloadState.reloadTrieHeal();
+
+    // Verify the queues were NOT cleared (requests still present)
+    assertThat(downloadState.pendingTrieNodeRequests.size()).isGreaterThan(0);
+    assertThat(downloadState.pendingCodeRequests.size()).isGreaterThan(0);
+    // setHealTrieStatus(false) should NOT have been called by reloadTrieHeal
+    verify(snapSyncState, never()).setHealTrieStatus(false);
+  }
+
+  @ParameterizedTest
+  @ArgumentsSource(SnapWorldDownloadStateTestArguments.class)
+  public void shouldNotCallReloadTrieHealFromObserverWhenPivotFrozen(
+      final DataStorageFormat storageFormat, final boolean isFlatDbHealingEnabled) {
+    setUp(storageFormat);
+
+    when(snapSyncState.isHealTrieInProgress()).thenReturn(true);
+    when(snapSyncState.isPivotFrozen()).thenReturn(true);
+
+    downloadState.setPivotBlockSelector(dynamicPivotBlockManager);
+
+    doAnswer(
+            invocation -> {
+              BiConsumer<BlockHeader, Boolean> callback =
+                  invocation.getArgument(0, BiConsumer.class);
+              callback.accept(header, true);
+              return null;
+            })
+        .when(dynamicPivotBlockManager)
+        .check(any());
+
+    final BlockAddedObserver blockAddedListener = downloadState.createBlockchainObserver();
+    blockAddedListener.onBlockAdded(
+        BlockAddedEvent.createForHeadAdvancement(
+            new Block(
+                new BlockHeaderTestFixture().number(500).buildHeader(),
+                new BlockBody(emptyList(), emptyList())),
+            Collections.emptyList(),
+            Collections.emptyList()));
+
+    // When pivot is frozen, the observer should NOT trigger reloadTrieHeal
+    verify(snapSyncState, never()).setHealTrieStatus(false);
+  }
+
+  @ParameterizedTest
+  @ArgumentsSource(SnapWorldDownloadStateTestArguments.class)
+  public void shouldFreezeAndUseFrozenHeaderForSaveWorldState(
+      final DataStorageFormat storageFormat, final boolean isFlatDbHealingEnabled) {
+    setUp(storageFormat);
+    when(snapSyncState.isHealTrieInProgress()).thenReturn(true);
+    when(snapSyncState.isHealFlatDatabaseInProgress()).thenReturn(true);
+    downloadState.checkCompletion(header);
+
+    // Verify freezePivot was called with the header
+    verify(snapSyncState).freezePivot(header);
+    assertThat(future).isCompleted();
+  }
+
+  @ParameterizedTest
+  @ArgumentsSource(SnapWorldDownloadStateTestArguments.class)
+  public void shouldNotifyPivotUpdateListenerOnlyOnceOnFreeze(
+      final DataStorageFormat storageFormat, final boolean isFlatDbHealingEnabled) {
+    setUp(storageFormat);
+    final PivotUpdateListener pivotUpdateListener = mock(PivotUpdateListener.class);
+    downloadState.setPivotUpdateListener(pivotUpdateListener);
+
+    when(snapSyncState.isHealTrieInProgress()).thenReturn(true);
+    when(snapSyncState.isHealFlatDatabaseInProgress()).thenReturn(true);
+
+    // First completion — should notify
+    downloadState.checkCompletion(header);
+    verify(pivotUpdateListener, times(1)).onPivotUpdated(header);
+
+    // Second completion (e.g. after flat DB heal) — pivot already frozen, should NOT notify again
+    when(snapSyncState.isPivotFrozen()).thenReturn(true);
+    downloadState.checkCompletion(header);
+    // Still only 1 invocation total
+    verify(pivotUpdateListener, times(1)).onPivotUpdated(any());
   }
 
   @Test

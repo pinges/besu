@@ -19,7 +19,6 @@ import org.hyperledger.besu.ethereum.core.ProcessableBlockHeader;
 import org.hyperledger.besu.ethereum.eth.manager.EthContext;
 import org.hyperledger.besu.ethereum.eth.sync.common.PivotSyncActions;
 import org.hyperledger.besu.ethereum.eth.sync.common.PivotSyncState;
-import org.hyperledger.besu.ethereum.eth.sync.common.PivotUpdateListener;
 
 import java.time.Duration;
 import java.util.Optional;
@@ -50,7 +49,6 @@ public class DynamicPivotBlockSelector {
   private final PivotSyncActions syncActions;
 
   private final SnapSyncProcessState syncState;
-  private final PivotUpdateListener pivotUpdateListener;
   private final int pivotBlockWindowValidity;
   private final int pivotBlockDistanceBeforeCaching;
 
@@ -60,19 +58,20 @@ public class DynamicPivotBlockSelector {
       final EthContext ethContext,
       final PivotSyncActions fastSyncActions,
       final SnapSyncProcessState fastSyncState,
-      final PivotUpdateListener pivotUpdateListener,
       final int pivotBlockWindowValidity,
       final int pivotBlockDistanceBeforeCaching) {
     this.ethContext = ethContext;
     this.syncActions = fastSyncActions;
     this.syncState = fastSyncState;
-    this.pivotUpdateListener = pivotUpdateListener;
     this.pivotBlockWindowValidity = pivotBlockWindowValidity;
     this.pivotBlockDistanceBeforeCaching = pivotBlockDistanceBeforeCaching;
     this.lastPivotBlockFound = Optional.empty();
   }
 
   public void check(final BiConsumer<BlockHeader, Boolean> onNewPivotBlock) {
+    if (syncState.isPivotFrozen()) {
+      return;
+    }
     if (isTimeToCheckAgain.compareAndSet(true, false)) {
       AtomicBoolean delayNextCheck = new AtomicBoolean(false);
 
@@ -190,6 +189,10 @@ public class DynamicPivotBlockSelector {
   }
 
   public void switchToNewPivotBlock(final BiConsumer<BlockHeader, Boolean> onSwitchDone) {
+    if (syncState.isPivotFrozen()) {
+      onSwitchDone.accept(syncState.getFrozenPivotBlockHeader().orElseThrow(), false);
+      return;
+    }
     lastPivotBlockFound.ifPresentOrElse(
         blockHeader -> {
           if (syncState.getPivotBlockHeader().filter(blockHeader::equals).isEmpty()) {
@@ -199,22 +202,11 @@ public class DynamicPivotBlockSelector {
                 .addArgument(blockHeader.getStateRoot())
                 .log();
             syncState.setCurrentHeader(blockHeader);
-
-            // Notify chain downloader of pivot update
-            if (pivotUpdateListener != null) {
-              pivotUpdateListener.onPivotUpdated(blockHeader);
-              LOG.trace("Notified chain downloader of pivot update: {}", blockHeader.getNumber());
-            }
-
             lastPivotBlockFound = Optional.empty();
           }
           onSwitchDone.accept(blockHeader, true);
         },
         () -> onSwitchDone.accept(syncState.getPivotBlockHeader().orElseThrow(), false));
-  }
-
-  public boolean isBlockchainBehind() {
-    return syncActions.isBlockchainBehind(syncState.getPivotBlockNumber().orElse(0L));
   }
 
   private String logLastPivotBlockFound() {

@@ -17,6 +17,7 @@ package org.hyperledger.besu.ethereum.eth.sync.snapsync;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -28,29 +29,30 @@ import org.hyperledger.besu.ethereum.eth.sync.common.PivotSyncState;
 import org.hyperledger.besu.ethereum.eth.sync.state.SyncState;
 import org.hyperledger.besu.testutil.DeterministicEthScheduler;
 
+import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-public class DynamicPivotBlockManagerTest {
+public class DynamicPivotBlockSelectorTest {
 
   private final SnapSyncProcessState snapSyncState = mock(SnapSyncProcessState.class);
   private final PivotSyncActions fastSyncActions = mock(PivotSyncActions.class);
   private final SyncState syncState = mock(SyncState.class);
   private final EthContext ethContext = mock(EthContext.class);
-  private DynamicPivotBlockSelector dynamicPivotBlockManager;
+  private DynamicPivotBlockSelector dynamicPivotBlockSelector;
 
   @BeforeEach
   public void setup() {
     when(fastSyncActions.getSyncState()).thenReturn(syncState);
     when(ethContext.getScheduler()).thenReturn(new DeterministicEthScheduler());
-    dynamicPivotBlockManager =
+    dynamicPivotBlockSelector =
         new DynamicPivotBlockSelector(
             ethContext,
             fastSyncActions,
             snapSyncState,
-            null, // PivotUpdateListener - not needed for tests
             SnapSyncConfiguration.DEFAULT_PIVOT_BLOCK_WINDOW_VALIDITY,
             SnapSyncConfiguration.DEFAULT_PIVOT_BLOCK_DISTANCE_BEFORE_CACHING);
   }
@@ -61,7 +63,7 @@ public class DynamicPivotBlockManagerTest {
     when(syncState.bestChainHeight()).thenReturn(1000L);
 
     when(snapSyncState.getPivotBlockNumber()).thenReturn(OptionalLong.of(999));
-    dynamicPivotBlockManager.check(
+    dynamicPivotBlockSelector.check(
         (blockHeader, newBlockFound) -> assertThat(newBlockFound).isFalse());
   }
 
@@ -79,7 +81,7 @@ public class DynamicPivotBlockManagerTest {
     when(syncState.bestChainHeight()).thenReturn(1000L);
 
     when(snapSyncState.getPivotBlockNumber()).thenReturn(OptionalLong.of(939));
-    dynamicPivotBlockManager.check(
+    dynamicPivotBlockSelector.check(
         (blockHeader, newBlockFound) -> assertThat(newBlockFound).isFalse());
   }
 
@@ -96,7 +98,7 @@ public class DynamicPivotBlockManagerTest {
     when(fastSyncActions.getBestChainHeight()).thenReturn(1000L);
 
     when(snapSyncState.getPivotBlockNumber()).thenReturn(OptionalLong.of(939));
-    dynamicPivotBlockManager.check(
+    dynamicPivotBlockSelector.check(
         (blockHeader, newBlockFound) -> {
           assertThat(blockHeader.getNumber()).isEqualTo(939);
           assertThat(newBlockFound).isFalse();
@@ -104,7 +106,7 @@ public class DynamicPivotBlockManagerTest {
 
     when(fastSyncActions.getBestChainHeight()).thenReturn(1066L);
 
-    dynamicPivotBlockManager.check(
+    dynamicPivotBlockSelector.check(
         (blockHeader, newBlockFound) -> {
           assertThat(blockHeader.getNumber()).isEqualTo(pivotBlockHeader.getNumber());
           assertThat(newBlockFound).isTrue();
@@ -126,15 +128,43 @@ public class DynamicPivotBlockManagerTest {
 
     when(syncState.bestChainHeight()).thenReturn(1066L);
 
-    dynamicPivotBlockManager.check(
+    dynamicPivotBlockSelector.check(
         (blockHeader, newBlockFound) -> {
           assertThat(blockHeader.getNumber()).isEqualTo(pivotBlockHeader.getNumber());
           assertThat(newBlockFound).isTrue();
-          dynamicPivotBlockManager.check(
+          dynamicPivotBlockSelector.check(
               (blockHeader1, aBoolean) -> {
                 assertThat(blockHeader1.getNumber()).isEqualTo(939);
                 assertThat(aBoolean).isFalse();
               });
         });
+  }
+
+  @Test
+  public void shouldNotCheckWhenPivotIsFrozen() {
+    when(snapSyncState.isPivotFrozen()).thenReturn(true);
+
+    AtomicBoolean callbackCalled = new AtomicBoolean(false);
+    dynamicPivotBlockSelector.check((blockHeader, newBlockFound) -> callbackCalled.set(true));
+
+    assertThat(callbackCalled.get()).isFalse();
+    // getPivotBlockNumber should never be called since check() returns early
+    verify(snapSyncState, never()).getPivotBlockNumber();
+  }
+
+  @Test
+  public void shouldReturnFrozenPivotFromSwitchWhenFrozen() {
+    final BlockHeader frozenHeader = new BlockHeaderTestFixture().number(1000).buildHeader();
+    when(snapSyncState.isPivotFrozen()).thenReturn(true);
+    when(snapSyncState.getFrozenPivotBlockHeader()).thenReturn(Optional.of(frozenHeader));
+
+    dynamicPivotBlockSelector.switchToNewPivotBlock(
+        (blockHeader, newBlockFound) -> {
+          assertThat(blockHeader).isEqualTo(frozenHeader);
+          assertThat(newBlockFound).isFalse();
+        });
+
+    // Should NOT update the current header
+    verify(snapSyncState, never()).setCurrentHeader(frozenHeader);
   }
 }

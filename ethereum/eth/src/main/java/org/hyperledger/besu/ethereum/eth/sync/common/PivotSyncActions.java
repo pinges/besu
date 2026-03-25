@@ -232,10 +232,6 @@ public class PivotSyncActions {
         .thenApply(blockHeader -> new PivotSyncState(blockHeader, sourceIsTrusted));
   }
 
-  public boolean isBlockchainBehind(final long blockNumber) {
-    return protocolContext.getBlockchain().getChainHeadHeader().getNumber() < blockNumber;
-  }
-
   /**
    * Sets the chain downloader listener to be notified of pivot updates from world state download.
    *

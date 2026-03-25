@@ -14,9 +14,12 @@
  */
 package org.hyperledger.besu.ethereum.eth.sync.snapsync;
 
+import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.core.SealableBlockHeader;
 import org.hyperledger.besu.ethereum.eth.sync.common.PivotSyncState;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.SnapDataRequest;
+
+import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,7 +33,7 @@ public class SnapSyncProcessState extends PivotSyncState {
 
   private boolean isHealTrieInProgress;
   private boolean isHealFlatDatabaseInProgress;
-  private boolean isWaitingBlockchain;
+  private volatile Optional<BlockHeader> frozenPivotBlockHeader = Optional.empty();
 
   public SnapSyncProcessState(final PivotSyncState fastSyncState) {
     super(
@@ -56,13 +59,23 @@ public class SnapSyncProcessState extends PivotSyncState {
     isHealFlatDatabaseInProgress = healFlatDatabaseInProgress;
   }
 
-  public boolean isWaitingBlockchain() {
-    return isWaitingBlockchain;
+  public BlockHeader freezePivot(final BlockHeader header) {
+    if (frozenPivotBlockHeader.isPresent()) {
+      LOG.warn("Pivot already frozen at block {}", frozenPivotBlockHeader.get().getNumber());
+      return frozenPivotBlockHeader.get();
+    }
+    frozenPivotBlockHeader = Optional.of(header);
+    LOG.info(
+        "Pivot frozen at block {} with state root {}", header.getNumber(), header.getStateRoot());
+    return header;
   }
 
-  public void setWaitingBlockchain(final boolean waitingBlockchain) {
-    LOG.debug("Set waiting blockchain to {}", waitingBlockchain);
-    isWaitingBlockchain = waitingBlockchain;
+  public boolean isPivotFrozen() {
+    return frozenPivotBlockHeader.isPresent();
+  }
+
+  public Optional<BlockHeader> getFrozenPivotBlockHeader() {
+    return frozenPivotBlockHeader;
   }
 
   public boolean isExpired(final SnapDataRequest request) {
