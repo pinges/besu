@@ -38,6 +38,7 @@ import org.hyperledger.besu.cli.config.EthNetworkConfig;
 import org.hyperledger.besu.cli.config.NativeRequirement;
 import org.hyperledger.besu.cli.config.NativeRequirement.NativeRequirementResult;
 import org.hyperledger.besu.cli.config.ProfilesCompletionCandidates;
+import org.hyperledger.besu.cli.converter.CheckpointConverter;
 import org.hyperledger.besu.cli.custom.JsonRPCAllowlistHostsProperty;
 import org.hyperledger.besu.cli.error.BesuExecutionExceptionHandler;
 import org.hyperledger.besu.cli.error.BesuParameterExceptionHandler;
@@ -123,6 +124,7 @@ import org.hyperledger.besu.ethereum.core.MiningParametersMetrics;
 import org.hyperledger.besu.ethereum.core.VersionMetadata;
 import org.hyperledger.besu.ethereum.eth.sync.SyncMode;
 import org.hyperledger.besu.ethereum.eth.sync.SynchronizerConfiguration;
+import org.hyperledger.besu.ethereum.eth.sync.common.checkpoint.Checkpoint;
 import org.hyperledger.besu.ethereum.eth.transactions.ImmutableTransactionPoolConfiguration;
 import org.hyperledger.besu.ethereum.eth.transactions.TransactionPoolConfiguration;
 import org.hyperledger.besu.ethereum.mainnet.BalConfiguration;
@@ -584,6 +586,16 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       arity = "*",
       split = ",")
   private final Map<Long, Hash> requiredBlocks = new HashMap<>();
+
+  @Option(
+      names = {"--checkpoint"},
+      paramLabel = "<blockHash>:<blockNumber>:<totalDifficulty>",
+      description =
+          "A trusted checkpoint to anchor sync to, overriding any checkpoint configured in the "
+              + "genesis file. Total difficulty may be decimal or 0x-prefixed hex "
+              + "(e.g. 0x<hash>:12345678:58750003716598352816469).",
+      converter = CheckpointConverter.class)
+  private final Checkpoint checkpointOverride = null;
 
   @SuppressWarnings({"FieldCanBeFinal", "FieldMayBeFinal"}) // PicoCLI requires non-final Strings.
   @Option(
@@ -2140,6 +2152,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
             .isLegacyBftProtocolEncodingEnabled(
                 unstableBftOptions.isLegacyProtocolEncodingEnabled())
             .requiredBlocks(requiredBlocks)
+            .checkpointOverride(checkpointOverride)
             .reorgLoggingThreshold(reorgLoggingThreshold)
             .evmConfiguration(unstableEvmOptions.toDomainObject())
             .maxPeers(p2PDiscoveryOptions.maxPeers)

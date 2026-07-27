@@ -66,9 +66,12 @@ import org.hyperledger.besu.ethereum.api.graphql.GraphQLConfiguration;
 import org.hyperledger.besu.ethereum.api.handlers.TimeoutOptions;
 import org.hyperledger.besu.ethereum.api.jsonrpc.JsonRpcConfiguration;
 import org.hyperledger.besu.ethereum.api.jsonrpc.websocket.WebSocketConfiguration;
+import org.hyperledger.besu.ethereum.core.Difficulty;
 import org.hyperledger.besu.ethereum.core.MiningConfiguration;
 import org.hyperledger.besu.ethereum.eth.sync.SyncMode;
 import org.hyperledger.besu.ethereum.eth.sync.SynchronizerConfiguration;
+import org.hyperledger.besu.ethereum.eth.sync.common.checkpoint.Checkpoint;
+import org.hyperledger.besu.ethereum.eth.sync.common.checkpoint.ImmutableCheckpoint;
 import org.hyperledger.besu.ethereum.p2p.config.DiscoveryMode;
 import org.hyperledger.besu.ethereum.p2p.peers.EnodeURLImpl;
 import org.hyperledger.besu.ethereum.worldstate.DataStorageConfiguration;
@@ -2239,6 +2242,53 @@ public class BesuCommandTest extends CommandTestAbstract {
         .containsEntry(block1, Hash.fromHexStringLenient(hash1));
     assertThat(requiredBlocksArg.getValue())
         .containsEntry(block2, Hash.fromHexStringLenient(hash2));
+  }
+
+  @Test
+  public void checkpointOverrideSetWhenSpecified() {
+    final String hash = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+    final long blockNumber = 12345678L;
+
+    parseCommand("--checkpoint=" + hash + ":" + blockNumber + ":1000000");
+
+    final ArgumentCaptor<Checkpoint> checkpointArg = ArgumentCaptor.forClass(Checkpoint.class);
+
+    verify(mockControllerBuilder).checkpointOverride(checkpointArg.capture());
+    verify(mockControllerBuilder).build();
+
+    assertThat(commandOutput.toString(UTF_8)).isEmpty();
+    assertThat(commandErrorOutput.toString(UTF_8)).isEmpty();
+
+    assertThat(checkpointArg.getValue())
+        .isEqualTo(
+            ImmutableCheckpoint.builder()
+                .blockHash(Hash.fromHexString(hash))
+                .blockNumber(blockNumber)
+                .totalDifficulty(Difficulty.of(1000000L))
+                .build());
+  }
+
+  @Test
+  public void checkpointOverrideEmptyWhenNotSpecified() {
+    parseCommand();
+
+    final ArgumentCaptor<Checkpoint> checkpointArg = ArgumentCaptor.forClass(Checkpoint.class);
+
+    verify(mockControllerBuilder).checkpointOverride(checkpointArg.capture());
+    verify(mockControllerBuilder).build();
+
+    assertThat(commandOutput.toString(UTF_8)).isEmpty();
+    assertThat(commandErrorOutput.toString(UTF_8)).isEmpty();
+
+    assertThat(checkpointArg.getValue()).isNull();
+  }
+
+  @Test
+  public void checkpointOverrideRejectsInvalidValue() {
+    parseCommand("--checkpoint=not-a-valid-checkpoint");
+
+    assertThat(commandOutput.toString(UTF_8)).isEmpty();
+    assertThat(commandErrorOutput.toString(UTF_8)).contains("Invalid checkpoint");
   }
 
   @Test

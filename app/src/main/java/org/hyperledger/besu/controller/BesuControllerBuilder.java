@@ -239,6 +239,9 @@ public abstract class BesuControllerBuilder implements MiningConfigurationOverri
   /** The global code cache */
   protected PathBasedCodeCache codeCache;
 
+  /** Trusted checkpoint provided via CLI, overriding any checkpoint in the genesis file. */
+  protected Checkpoint checkpointOverride;
+
   /** Instantiates a new Besu controller builder. */
   protected BesuControllerBuilder() {}
 
@@ -421,6 +424,18 @@ public abstract class BesuControllerBuilder implements MiningConfigurationOverri
    */
   public BesuControllerBuilder requiredBlocks(final Map<Long, Hash> requiredBlocks) {
     this.requiredBlocks = requiredBlocks;
+    return this;
+  }
+
+  /**
+   * Trusted checkpoint override besu controller builder. When non-null, this checkpoint takes
+   * precedence over any checkpoint configured in the genesis file.
+   *
+   * @param checkpointOverride the checkpoint provided via CLI, or null if none was provided
+   * @return the besu controller builder
+   */
+  public BesuControllerBuilder checkpointOverride(final Checkpoint checkpointOverride) {
+    this.checkpointOverride = checkpointOverride;
     return this;
   }
 
@@ -758,19 +773,27 @@ public abstract class BesuControllerBuilder implements MiningConfigurationOverri
     final EthMessages ethMessages = new EthMessages();
     final EthMessages snapMessages = new EthMessages();
 
-    Optional<Checkpoint> checkpoint = Optional.empty();
-    if (genesisConfigOptions.getCheckpointOptions().isValid()) {
+    final Optional<Checkpoint> checkpoint;
+    if (checkpointOverride != null) {
+      checkpoint = Optional.of(checkpointOverride);
+    } else {
       checkpoint =
-          Optional.of(
-              ImmutableCheckpoint.builder()
-                  .blockHash(
-                      Hash.fromHexString(
-                          genesisConfigOptions.getCheckpointOptions().getHash().get()))
-                  .blockNumber(genesisConfigOptions.getCheckpointOptions().getNumber().getAsLong())
-                  .totalDifficulty(
-                      Difficulty.fromHexString(
-                          genesisConfigOptions.getCheckpointOptions().getTotalDifficulty().get()))
-                  .build());
+          genesisConfigOptions.getCheckpointOptions().isValid()
+              ? Optional.of(
+                  ImmutableCheckpoint.builder()
+                      .blockHash(
+                          Hash.fromHexString(
+                              genesisConfigOptions.getCheckpointOptions().getHash().get()))
+                      .blockNumber(
+                          genesisConfigOptions.getCheckpointOptions().getNumber().getAsLong())
+                      .totalDifficulty(
+                          Difficulty.fromHexString(
+                              genesisConfigOptions
+                                  .getCheckpointOptions()
+                                  .getTotalDifficulty()
+                                  .get()))
+                      .build())
+              : Optional.empty();
     }
 
     final PeerTaskExecutor peerTaskExecutor =
