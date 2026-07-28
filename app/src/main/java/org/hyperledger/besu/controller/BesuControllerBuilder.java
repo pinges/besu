@@ -18,6 +18,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import org.hyperledger.besu.chainimport.BlockHeadersCachePreload;
 import org.hyperledger.besu.components.BesuComponent;
+import org.hyperledger.besu.config.CheckpointConfigOptions;
 import org.hyperledger.besu.config.GenesisConfig;
 import org.hyperledger.besu.config.GenesisConfigOptions;
 import org.hyperledger.besu.consensus.merge.MergeContext;
@@ -42,7 +43,6 @@ import org.hyperledger.besu.ethereum.chain.GenesisState;
 import org.hyperledger.besu.ethereum.chain.MutableBlockchain;
 import org.hyperledger.besu.ethereum.chain.VariablesStorage;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
-import org.hyperledger.besu.ethereum.core.Difficulty;
 import org.hyperledger.besu.ethereum.core.MiningConfiguration;
 import org.hyperledger.besu.ethereum.core.Synchronizer;
 import org.hyperledger.besu.ethereum.eth.EthProtocol;
@@ -68,7 +68,6 @@ import org.hyperledger.besu.ethereum.eth.sync.common.PivotSelectorFromPeers;
 import org.hyperledger.besu.ethereum.eth.sync.common.PivotSelectorFromSafeBlock;
 import org.hyperledger.besu.ethereum.eth.sync.common.SingleBlockHeaderDownloader;
 import org.hyperledger.besu.ethereum.eth.sync.common.checkpoint.Checkpoint;
-import org.hyperledger.besu.ethereum.eth.sync.common.checkpoint.ImmutableCheckpoint;
 import org.hyperledger.besu.ethereum.eth.sync.fullsync.SyncTerminationCondition;
 import org.hyperledger.besu.ethereum.eth.sync.state.SyncState;
 import org.hyperledger.besu.ethereum.eth.transactions.BlobCache;
@@ -777,22 +776,15 @@ public abstract class BesuControllerBuilder implements MiningConfigurationOverri
     if (checkpointOverride != null) {
       checkpoint = Optional.of(checkpointOverride);
     } else {
+      final CheckpointConfigOptions checkpointConfigOptions =
+          genesisConfigOptions.getCheckpointOptions();
       checkpoint =
-          genesisConfigOptions.getCheckpointOptions().isValid()
+          checkpointConfigOptions.isValid()
               ? Optional.of(
-                  ImmutableCheckpoint.builder()
-                      .blockHash(
-                          Hash.fromHexString(
-                              genesisConfigOptions.getCheckpointOptions().getHash().get()))
-                      .blockNumber(
-                          genesisConfigOptions.getCheckpointOptions().getNumber().getAsLong())
-                      .totalDifficulty(
-                          Difficulty.fromHexString(
-                              genesisConfigOptions
-                                  .getCheckpointOptions()
-                                  .getTotalDifficulty()
-                                  .get()))
-                      .build())
+                  Checkpoint.of(
+                      checkpointConfigOptions.getHash().get(),
+                      checkpointConfigOptions.getNumber().getAsLong(),
+                      checkpointConfigOptions.getTotalDifficulty().get()))
               : Optional.empty();
     }
 

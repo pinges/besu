@@ -14,10 +14,7 @@
  */
 package org.hyperledger.besu.cli.converter;
 
-import org.hyperledger.besu.datatypes.Hash;
-import org.hyperledger.besu.ethereum.core.Difficulty;
 import org.hyperledger.besu.ethereum.eth.sync.common.checkpoint.Checkpoint;
-import org.hyperledger.besu.ethereum.eth.sync.common.checkpoint.ImmutableCheckpoint;
 
 import picocli.CommandLine;
 
@@ -42,14 +39,6 @@ public class CheckpointConverter implements CommandLine.ITypeConverter<Checkpoin
           "Invalid checkpoint '" + value + "': " + FORMAT_HINT + ".");
     }
 
-    final Hash blockHash;
-    try {
-      blockHash = Hash.fromHexString(parts[0]);
-    } catch (final IllegalArgumentException e) {
-      throw new CommandLine.TypeConversionException(
-          "Invalid checkpoint block hash '" + parts[0] + "': must be a 32-byte hex string.");
-    }
-
     final long blockNumber;
     try {
       blockNumber = Long.parseLong(parts[1]);
@@ -57,25 +46,11 @@ public class CheckpointConverter implements CommandLine.ITypeConverter<Checkpoin
       throw new CommandLine.TypeConversionException(
           "Invalid checkpoint block number '" + parts[1] + "': must be a non-negative integer.");
     }
-    if (blockNumber < 0) {
-      throw new CommandLine.TypeConversionException(
-          "Invalid checkpoint block number '" + parts[1] + "': must be a non-negative integer.");
-    }
 
-    final Difficulty totalDifficulty;
     try {
-      totalDifficulty = Difficulty.fromHexOrDecimalString(parts[2]);
+      return Checkpoint.of(parts[0], blockNumber, parts[2]);
     } catch (final IllegalArgumentException e) {
-      throw new CommandLine.TypeConversionException(
-          "Invalid checkpoint total difficulty '"
-              + parts[2]
-              + "': must be a decimal or 0x-prefixed hex value.");
+      throw new CommandLine.TypeConversionException(e.getMessage());
     }
-
-    return ImmutableCheckpoint.builder()
-        .blockHash(blockHash)
-        .blockNumber(blockNumber)
-        .totalDifficulty(totalDifficulty)
-        .build();
   }
 }

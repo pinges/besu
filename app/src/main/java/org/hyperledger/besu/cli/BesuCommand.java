@@ -2908,6 +2908,15 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
         throw new InvalidConfigurationException(
             "The checkpoint block configured in the genesis file is not valid.");
       }
+      try {
+        Checkpoint.of(
+            checkpointConfigOptions.getHash().get(),
+            checkpointConfigOptions.getNumber().getAsLong(),
+            checkpointConfigOptions.getTotalDifficulty().get());
+      } catch (final IllegalArgumentException e) {
+        throw new InvalidConfigurationException(
+            "The checkpoint block configured in the genesis file is not valid: " + e.getMessage());
+      }
     }
   }
 
