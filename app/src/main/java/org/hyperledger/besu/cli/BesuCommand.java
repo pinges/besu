@@ -1974,6 +1974,10 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
       logger.warn("--sync-min-peers is ignored in FULL sync-mode");
     }
 
+    if (getDefaultSyncModeIfNotSet() == SyncMode.FULL && isOptionSet(commandLine, "--checkpoint")) {
+      logger.warn("--checkpoint is ignored in FULL sync-mode");
+    }
+
     CommandLineUtils.failIfOptionDoesntMeetRequirement(
         commandLine,
         "--Xsnapsync-synchronizer-flat option can only be used when --Xbonsai-full-flat-db-enabled is true",
