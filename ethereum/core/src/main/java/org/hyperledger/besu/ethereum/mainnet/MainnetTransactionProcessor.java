@@ -35,6 +35,7 @@ import org.hyperledger.besu.evm.Code;
 import org.hyperledger.besu.evm.account.Account;
 import org.hyperledger.besu.evm.account.MutableAccount;
 import org.hyperledger.besu.evm.blockhash.BlockHashLookup;
+import org.hyperledger.besu.evm.frame.ExceptionalHaltReason;
 import org.hyperledger.besu.evm.frame.MessageFrame;
 import org.hyperledger.besu.evm.gascalculator.GasCalculator;
 import org.hyperledger.besu.evm.gascalculator.StateGasCostCalculator;
@@ -312,6 +313,7 @@ public class MainnetTransactionProcessor {
       long codeDelegationRefund = 0L;
       long alreadyExistingDelegators = 0L;
       long authBaseRefundCount = 0L;
+      long codeDelegationAuthorityWrites = 0L;
       if (transaction.getType().equals(TransactionType.DELEGATE_CODE)) {
         if (maybeCodeDelegationProcessor.isEmpty()) {
           throw new RuntimeException("Code delegation processor is required for 7702 transactions");
@@ -325,6 +327,7 @@ public class MainnetTransactionProcessor {
         eip2930WarmAddressList.addAll(codeDelegationResult.accessedDelegatorAddresses());
         alreadyExistingDelegators = codeDelegationResult.alreadyExistingDelegators();
         authBaseRefundCount = codeDelegationResult.authBaseRefundCount();
+        codeDelegationAuthorityWrites = codeDelegationResult.authorityWrites();
         codeDelegationRefund =
             gasCalculator.calculateDelegateCodeGasRefund(alreadyExistingDelegators);
         delegationUpdater.commit();
@@ -416,6 +419,31 @@ public class MainnetTransactionProcessor {
                 .code(code)
                 .eip2930AccessListWarmAddresses(eip2930WarmAddressList)
                 .build();
+
+        // EIP-2780: the runtime charges below run after the transaction is already valid but before
+        // the first frame executes, in spec order: authorization writes, then recipient creation.
+        // Running out of gas here doesn't invalidate the transaction, it halts it exceptionally.
+        final long authorityWriteGas =
+            gasCalculator.delegateCodeAccountWriteGasCost(codeDelegationAuthorityWrites);
+        if (authorityWriteGas > 0L) {
+          if (initialFrame.getRemainingGas() < authorityWriteGas) {
+            haltForInsufficientGas(initialFrame);
+          } else {
+            initialFrame.decrementRemainingGas(authorityWriteGas);
+          }
+        }
+
+        // EIP-2780: charge NEW_ACCOUNT state gas on the depth-0 frame for a positive value transfer
+        if (initialFrame.getState() != MessageFrame.State.EXCEPTIONAL_HALT
+            && stateGasCalc.isActive()
+            && !transaction.getValue().isZero()) {
+          final Account recipient = worldState.get(to);
+          if (recipient == null || recipient.isEmpty()) {
+            if (!initialFrame.consumeStateGas(stateGasCalc.newAccountStateGas())) {
+              haltForInsufficientGas(initialFrame);
+            }
+          }
+        }
       }
       Deque<MessageFrame> messageFrameStack = initialFrame.getMessageFrameStack();
       while (!messageFrameStack.isEmpty()) {
@@ -662,6 +690,12 @@ public class MainnetTransactionProcessor {
 
   public GasCalculator getGasCalculator() {
     return gasCalculator;
+  }
+
+  /** Halts the initial frame for a pre-execution charge it can't cover. */
+  private static void haltForInsufficientGas(final MessageFrame frame) {
+    frame.setExceptionalHaltReason(Optional.of(ExceptionalHaltReason.INSUFFICIENT_GAS));
+    frame.setState(MessageFrame.State.EXCEPTIONAL_HALT);
   }
 
   /**
