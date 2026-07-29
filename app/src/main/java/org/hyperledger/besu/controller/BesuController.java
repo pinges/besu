@@ -29,6 +29,7 @@ import org.hyperledger.besu.ethereum.eth.manager.EthPeers;
 import org.hyperledger.besu.ethereum.eth.manager.EthProtocolManager;
 import org.hyperledger.besu.ethereum.eth.manager.EthScheduler;
 import org.hyperledger.besu.ethereum.eth.sync.SyncMode;
+import org.hyperledger.besu.ethereum.eth.sync.common.checkpoint.Checkpoint;
 import org.hyperledger.besu.ethereum.eth.sync.state.SyncState;
 import org.hyperledger.besu.ethereum.eth.transactions.TransactionPool;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
@@ -317,8 +318,24 @@ public class BesuController implements java.io.Closeable {
 
   /** The type Builder. */
   public static class Builder {
+
+    private Checkpoint checkpointOverride;
+
     /** Instantiates a new Builder. */
     public Builder() {}
+
+    /**
+     * Sets a trusted checkpoint supplied via the {@code --checkpoint} CLI option, taking precedence
+     * over any checkpoint configured in the genesis file when selecting the consensus controller
+     * builder (see {@link #isCheckpointPoSBlock}).
+     *
+     * @param checkpointOverride the CLI checkpoint override, or null if none was provided
+     * @return this builder
+     */
+    public Builder checkpointOverride(final Checkpoint checkpointOverride) {
+      this.checkpointOverride = checkpointOverride;
+      return this;
+    }
 
     /**
      * From eth network config besu controller builder.
@@ -436,6 +453,13 @@ public class BesuController implements java.io.Closeable {
 
     private boolean isCheckpointPoSBlock(final GenesisConfigOptions configOptions) {
       final UInt256 terminalTotalDifficulty = configOptions.getTerminalTotalDifficulty().get();
+
+      if (checkpointOverride != null) {
+        return checkpointOverride
+            .totalDifficulty()
+            .toUInt256()
+            .greaterThan(terminalTotalDifficulty);
+      }
 
       return configOptions.getCheckpointOptions().isValid()
           && (UInt256.fromHexString(configOptions.getCheckpointOptions().getTotalDifficulty().get())

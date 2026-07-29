@@ -24,6 +24,7 @@ import org.hyperledger.besu.config.GenesisConfig;
 import org.hyperledger.besu.config.GenesisConfigOptions;
 import org.hyperledger.besu.config.QbftConfigOptions;
 import org.hyperledger.besu.ethereum.eth.sync.SyncMode;
+import org.hyperledger.besu.ethereum.eth.sync.common.checkpoint.Checkpoint;
 
 import java.io.IOException;
 import java.util.Locale;
@@ -182,6 +183,28 @@ public class BesuControllerTest {
         new BesuController.Builder().fromGenesisFile(checkpointPreMerge, SyncMode.SNAP);
 
     assertThat(besuControllerBuilder).isInstanceOf(TransitionBesuControllerBuilder.class);
+  }
+
+  @Test
+  public void postMergeCheckpointOverrideMakesPreMergeGenesisUseMergeControllerBuilder() {
+    // Genesis has a pre-merge checkpoint (TD < TTD), which alone selects the transition builder. A
+    // post-merge --checkpoint override (TD > TTD = 58750000000000000000000) must take precedence
+    // and
+    // select the vanilla merge builder, just as it does for the sync checkpoint.
+    final GenesisConfig checkpointPreMerge =
+        GenesisConfig.fromResource("/valid_pre_merge_checkpoint.json");
+    final Checkpoint postMergeOverride =
+        Checkpoint.of(
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            12345678L,
+            "58750000000000000000001");
+
+    final BesuControllerBuilder besuControllerBuilder =
+        new BesuController.Builder()
+            .checkpointOverride(postMergeOverride)
+            .fromGenesisFile(checkpointPreMerge, SyncMode.SNAP);
+
+    assertThat(besuControllerBuilder).isInstanceOf(MergeBesuControllerBuilder.class);
   }
 
   @Test
