@@ -22,6 +22,8 @@ import org.hyperledger.besu.ethereum.core.Difficulty;
 import org.hyperledger.besu.ethereum.eth.sync.common.checkpoint.Checkpoint;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import picocli.CommandLine;
 
 public class CheckpointConverterTest {
@@ -50,6 +52,19 @@ public class CheckpointConverterTest {
   @Test
   public void rejectsWrongNumberOfParts() {
     assertThat(catchThrowable(() -> converter.convert(VALID_HASH + ":100")))
+        .isInstanceOf(CommandLine.TypeConversionException.class);
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        ":100:1000", // block hash missing
+        VALID_HASH + "::1000", // block number missing
+        VALID_HASH + ":100:", // total difficulty missing
+        "::", // all three missing
+      })
+  public void rejectsWhenAnElementIsMissing(final String value) {
+    assertThat(catchThrowable(() -> converter.convert(value)))
         .isInstanceOf(CommandLine.TypeConversionException.class);
   }
 
