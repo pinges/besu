@@ -49,6 +49,7 @@ import org.hyperledger.besu.ethereum.core.plugins.ImmutablePluginConfiguration;
 import org.hyperledger.besu.ethereum.core.plugins.PluginInfo;
 import org.hyperledger.besu.ethereum.eth.EthProtocolConfiguration;
 import org.hyperledger.besu.ethereum.eth.sync.SynchronizerConfiguration;
+import org.hyperledger.besu.ethereum.eth.sync.common.checkpoint.Checkpoint;
 import org.hyperledger.besu.ethereum.eth.transactions.BlobCacheModule;
 import org.hyperledger.besu.ethereum.eth.transactions.ImmutableTransactionPoolConfiguration;
 import org.hyperledger.besu.ethereum.eth.transactions.TransactionPoolConfiguration;
@@ -98,6 +99,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -470,8 +472,12 @@ public class ThreadBesuNodeRunner implements BesuNodeRunner {
         final TransactionPoolConfiguration transactionPoolConfiguration,
         final DataStorageConfiguration dataStorageConfiguration) {
 
+      final Optional<Checkpoint> checkpoint =
+          Checkpoint.fromConfig(
+              ethNetworkConfig.genesisConfig().getConfigOptions().getCheckpointOptions());
       final BesuControllerBuilder builder =
           new BesuController.Builder()
+              .checkpoint(checkpoint)
               .fromEthNetworkConfig(ethNetworkConfig, synchronizerConfiguration.getSyncMode());
       builder.transactionPoolConfiguration(transactionPoolConfiguration);
       builder.dataStorageConfiguration(dataStorageConfiguration);
