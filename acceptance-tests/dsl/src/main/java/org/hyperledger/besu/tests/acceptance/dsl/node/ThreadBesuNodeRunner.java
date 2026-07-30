@@ -483,7 +483,7 @@ public class ThreadBesuNodeRunner implements BesuNodeRunner {
       return builder;
     }
 
-    private Optional<Checkpoint> getCheckpoint(EthNetworkConfig ethNetworkConfig) {
+    private Optional<Checkpoint> getCheckpoint(final EthNetworkConfig ethNetworkConfig) {
       final CheckpointConfigOptions checkpointConfigOptions =
           ethNetworkConfig.genesisConfig().getConfigOptions().getCheckpointOptions();
       if (checkpointConfigOptions == CheckpointConfigOptions.DEFAULT) {
