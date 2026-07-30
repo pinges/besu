@@ -29,6 +29,7 @@ import org.hyperledger.besu.chainimport.RlpBlockImporter;
 import org.hyperledger.besu.cli.BesuCommand;
 import org.hyperledger.besu.cli.config.EthNetworkConfig;
 import org.hyperledger.besu.components.BesuComponent;
+import org.hyperledger.besu.config.CheckpointConfigOptions;
 import org.hyperledger.besu.config.GenesisConfig;
 import org.hyperledger.besu.config.NetworkDefinition;
 import org.hyperledger.besu.controller.BesuController;
@@ -472,9 +473,7 @@ public class ThreadBesuNodeRunner implements BesuNodeRunner {
         final TransactionPoolConfiguration transactionPoolConfiguration,
         final DataStorageConfiguration dataStorageConfiguration) {
 
-      final Optional<Checkpoint> checkpoint =
-          Checkpoint.fromConfig(
-              ethNetworkConfig.genesisConfig().getConfigOptions().getCheckpointOptions());
+      final Optional<Checkpoint> checkpoint = getCheckpoint(ethNetworkConfig);
       final BesuControllerBuilder builder =
           new BesuController.Builder()
               .checkpoint(checkpoint)
@@ -482,6 +481,25 @@ public class ThreadBesuNodeRunner implements BesuNodeRunner {
       builder.transactionPoolConfiguration(transactionPoolConfiguration);
       builder.dataStorageConfiguration(dataStorageConfiguration);
       return builder;
+    }
+
+    private Optional<Checkpoint> getCheckpoint(EthNetworkConfig ethNetworkConfig) {
+      final CheckpointConfigOptions checkpointConfigOptions =
+          ethNetworkConfig.genesisConfig().getConfigOptions().getCheckpointOptions();
+      if (checkpointConfigOptions == CheckpointConfigOptions.DEFAULT) {
+        return Optional.empty();
+      } else if (!checkpointConfigOptions.isValid()) {
+        throw new IllegalArgumentException(
+            "The checkpoint block configured in the genesis file is not valid.");
+      } else {
+        try {
+          return Checkpoint.fromConfig(checkpointConfigOptions);
+        } catch (final IllegalArgumentException e) {
+          throw new IllegalArgumentException(
+              "The checkpoint block configured in the genesis file is not valid: " + e.getMessage(),
+              e);
+        }
+      }
     }
 
     @Provides
