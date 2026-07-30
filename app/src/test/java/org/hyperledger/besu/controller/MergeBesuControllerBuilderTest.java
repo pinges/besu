@@ -365,36 +365,7 @@ public class MergeBesuControllerBuilderTest {
 
     final Optional<Checkpoint> checkpoint =
         visitWithMockConfigs(new MergeBesuControllerBuilder())
-            .checkpointOverride(override)
-            .build()
-            .getSyncState()
-            .getCheckpoint();
-
-    assertThat(checkpoint).contains(override);
-  }
-
-  @Test
-  public void checkpointOverrideTakesPrecedenceOverGenesisCheckpoint() {
-    lenient().when(checkpointConfigOptions.isValid()).thenReturn(true);
-    lenient()
-        .when(checkpointConfigOptions.getHash())
-        .thenReturn(
-            Optional.of("0x00000000000000000000000000000000000000000000000000000000000000ff"));
-    lenient().when(checkpointConfigOptions.getNumber()).thenReturn(OptionalLong.of(50L));
-    lenient().when(checkpointConfigOptions.getTotalDifficulty()).thenReturn(Optional.of("0x64"));
-
-    final Checkpoint override =
-        ImmutableCheckpoint.builder()
-            .blockHash(
-                Hash.fromHexString(
-                    "0x0000000000000000000000000000000000000000000000000000000000000001"))
-            .blockNumber(1234L)
-            .totalDifficulty(Difficulty.of(9999L))
-            .build();
-
-    final Optional<Checkpoint> checkpoint =
-        visitWithMockConfigs(new MergeBesuControllerBuilder())
-            .checkpointOverride(override)
+            .checkpoint(Optional.of(override))
             .build()
             .getSyncState()
             .getCheckpoint();

@@ -44,6 +44,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.tuweni.units.bigints.UInt256;
 import org.slf4j.Logger;
@@ -319,21 +320,19 @@ public class BesuController implements java.io.Closeable {
   /** The type Builder. */
   public static class Builder {
 
-    private Checkpoint checkpointOverride;
+    private Optional<Checkpoint> checkpoint = Optional.empty();
 
     /** Instantiates a new Builder. */
     public Builder() {}
 
     /**
-     * Sets a trusted checkpoint supplied via the {@code --checkpoint} CLI option, taking precedence
-     * over any checkpoint configured in the genesis file when selecting the consensus controller
-     * builder (see {@link #isCheckpointPoSBlock}).
+     * Sets the effective checkpoint .
      *
-     * @param checkpointOverride the CLI checkpoint override, or null if none was provided
+     * @param checkpoint the checkpoint, or empty for no checkpoint
      * @return this builder
      */
-    public Builder checkpointOverride(final Checkpoint checkpointOverride) {
-      this.checkpointOverride = checkpointOverride;
+    public Builder checkpoint(final Optional<Checkpoint> checkpoint) {
+      this.checkpoint = checkpoint;
       return this;
     }
 
@@ -359,8 +358,14 @@ public class BesuController implements java.io.Closeable {
      */
     public BesuControllerBuilder fromGenesisFile(
         final GenesisConfig genesisConfig, final SyncMode syncMode) {
-      final var configOptions = genesisConfig.getConfigOptions();
+      final GenesisConfigOptions configOptions = genesisConfig.getConfigOptions();
+      return createControllerBuilder(genesisConfig, configOptions, syncMode).checkpoint(checkpoint);
+    }
 
+    private BesuControllerBuilder createControllerBuilder(
+        final GenesisConfig genesisConfig,
+        final GenesisConfigOptions configOptions,
+        final SyncMode syncMode) {
       if (configOptions.isConsensusMigration()) {
         return createConsensusScheduleBesuControllerBuilder(genesisConfig);
       }
@@ -453,17 +458,9 @@ public class BesuController implements java.io.Closeable {
 
     private boolean isCheckpointPoSBlock(final GenesisConfigOptions configOptions) {
       final UInt256 terminalTotalDifficulty = configOptions.getTerminalTotalDifficulty().get();
-
-      if (checkpointOverride != null) {
-        return checkpointOverride
-            .totalDifficulty()
-            .toUInt256()
-            .greaterThan(terminalTotalDifficulty);
-      }
-
-      return configOptions.getCheckpointOptions().isValid()
-          && (UInt256.fromHexString(configOptions.getCheckpointOptions().getTotalDifficulty().get())
-              .greaterThan(terminalTotalDifficulty));
+      return this.checkpoint
+          .map(c -> c.totalDifficulty().toUInt256().greaterThan(terminalTotalDifficulty))
+          .orElse(false);
     }
   }
 }

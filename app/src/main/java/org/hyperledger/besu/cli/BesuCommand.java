@@ -693,6 +693,8 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
   private BesuController besuController;
   private BesuConfigurationImpl pluginCommonConfiguration;
 
+  private Optional<Checkpoint> checkpoint = Optional.empty();
+
   private Vertx vertx;
   private Runner runner;
   private EnodeDnsConfiguration enodeDnsConfiguration;
@@ -1560,7 +1562,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
     validateRpcOptionsParams();
     validateRpcWsOptions();
     validateChainDataPruningParams();
-    validatePostMergeCheckpointBlockRequirements();
+    resolveAndValidateCheckpoint();
     validateTransactionPoolOptions();
     validateDataStorageOptions();
     validateGraphQlOptions();
@@ -2141,7 +2143,7 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
 
     BesuControllerBuilder besuControllerBuilder =
         controllerBuilder
-            .checkpointOverride(checkpointOverride)
+            .checkpoint(checkpoint)
             .fromEthNetworkConfig(updateNetworkConfig(network), getDefaultSyncModeIfNotSet())
             .synchronizerConfiguration(buildSyncConfig())
             .ethProtocolConfiguration(unstableEthProtocolOptions.toDomainObject())
@@ -2159,7 +2161,6 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
             .isLegacyBftProtocolEncodingEnabled(
                 unstableBftOptions.isLegacyProtocolEncodingEnabled())
             .requiredBlocks(requiredBlocks)
-            .checkpointOverride(checkpointOverride)
             .reorgLoggingThreshold(reorgLoggingThreshold)
             .evmConfiguration(unstableEvmOptions.toDomainObject())
             .maxPeers(p2PDiscoveryOptions.maxPeers)
@@ -2904,26 +2905,28 @@ public class BesuCommand implements DefaultCommandValues, Runnable {
     }
   }
 
-  private void validatePostMergeCheckpointBlockRequirements() {
+  private void resolveAndValidateCheckpoint() {
+    if (checkpointOverride != null) {
+      checkpoint = Optional.of(checkpointOverride);
+      return;
+    }
+
     final GenesisConfigOptions genesisConfigOptions = readGenesisConfigOptions();
     final CheckpointConfigOptions checkpointConfigOptions =
         genesisConfigOptions.getCheckpointOptions();
 
-    // Only validate if checkpoint config is not the default (empty) one
-    if (checkpointConfigOptions != CheckpointConfigOptions.DEFAULT) {
-      if (!checkpointConfigOptions.isValid()) {
-        throw new InvalidConfigurationException(
-            "The checkpoint block configured in the genesis file is not valid.");
-      }
-      try {
-        Checkpoint.of(
-            checkpointConfigOptions.getHash().get(),
-            checkpointConfigOptions.getNumber().getAsLong(),
-            checkpointConfigOptions.getTotalDifficulty().get());
-      } catch (final IllegalArgumentException e) {
-        throw new InvalidConfigurationException(
-            "The checkpoint block configured in the genesis file is not valid: " + e.getMessage());
-      }
+    if (checkpointConfigOptions == CheckpointConfigOptions.DEFAULT) {
+      return;
+    }
+    if (!checkpointConfigOptions.isValid()) {
+      throw new InvalidConfigurationException(
+          "The checkpoint block configured in the genesis file is not valid.");
+    }
+    try {
+      checkpoint = Checkpoint.fromConfig(checkpointConfigOptions);
+    } catch (final IllegalArgumentException e) {
+      throw new InvalidConfigurationException(
+          "The checkpoint block configured in the genesis file is not valid: " + e.getMessage());
     }
   }
 

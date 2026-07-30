@@ -18,7 +18,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import org.hyperledger.besu.chainimport.BlockHeadersCachePreload;
 import org.hyperledger.besu.components.BesuComponent;
-import org.hyperledger.besu.config.CheckpointConfigOptions;
 import org.hyperledger.besu.config.GenesisConfig;
 import org.hyperledger.besu.config.GenesisConfigOptions;
 import org.hyperledger.besu.consensus.merge.MergeContext;
@@ -238,8 +237,8 @@ public abstract class BesuControllerBuilder implements MiningConfigurationOverri
   /** The global code cache */
   protected PathBasedCodeCache codeCache;
 
-  /** Trusted checkpoint provided via CLI, overriding any checkpoint in the genesis file. */
-  protected Checkpoint checkpointOverride;
+  /** The effective checkpoint to sync to (CLI override or genesis). */
+  protected Optional<Checkpoint> checkpoint = Optional.empty();
 
   /** Instantiates a new Besu controller builder. */
   protected BesuControllerBuilder() {}
@@ -427,14 +426,13 @@ public abstract class BesuControllerBuilder implements MiningConfigurationOverri
   }
 
   /**
-   * Trusted checkpoint override besu controller builder. When non-null, this checkpoint takes
-   * precedence over any checkpoint configured in the genesis file.
+   * Sets the effective checkpoint to sync to.
    *
-   * @param checkpointOverride the checkpoint provided via CLI, or null if none was provided
+   * @param checkpoint the resolved checkpoint, or empty if none applies
    * @return the besu controller builder
    */
-  public BesuControllerBuilder checkpointOverride(final Checkpoint checkpointOverride) {
-    this.checkpointOverride = checkpointOverride;
+  public BesuControllerBuilder checkpoint(final Optional<Checkpoint> checkpoint) {
+    this.checkpoint = checkpoint;
     return this;
   }
 
@@ -771,22 +769,6 @@ public abstract class BesuControllerBuilder implements MiningConfigurationOverri
 
     final EthMessages ethMessages = new EthMessages();
     final EthMessages snapMessages = new EthMessages();
-
-    final Optional<Checkpoint> checkpoint;
-    if (checkpointOverride != null) {
-      checkpoint = Optional.of(checkpointOverride);
-    } else {
-      final CheckpointConfigOptions checkpointConfigOptions =
-          genesisConfigOptions.getCheckpointOptions();
-      checkpoint =
-          checkpointConfigOptions.isValid()
-              ? Optional.of(
-                  Checkpoint.of(
-                      checkpointConfigOptions.getHash().get(),
-                      checkpointConfigOptions.getNumber().getAsLong(),
-                      checkpointConfigOptions.getTotalDifficulty().get()))
-              : Optional.empty();
-    }
 
     final PeerTaskExecutor peerTaskExecutor =
         new PeerTaskExecutor(

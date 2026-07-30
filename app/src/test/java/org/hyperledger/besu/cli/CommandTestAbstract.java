@@ -276,7 +276,7 @@ public abstract class CommandTestAbstract {
   @BeforeEach
   public void initMocks() throws Exception {
     lenient()
-        .when(mockControllerBuilderFactory.checkpointOverride(any()))
+        .when(mockControllerBuilderFactory.checkpoint(any()))
         .thenReturn(mockControllerBuilderFactory);
     when(mockControllerBuilderFactory.fromEthNetworkConfig(any(), any()))
         .thenReturn(mockControllerBuilder);

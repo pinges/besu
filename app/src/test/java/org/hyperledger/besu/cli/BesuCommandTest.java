@@ -70,7 +70,6 @@ import org.hyperledger.besu.ethereum.core.Difficulty;
 import org.hyperledger.besu.ethereum.core.MiningConfiguration;
 import org.hyperledger.besu.ethereum.eth.sync.SyncMode;
 import org.hyperledger.besu.ethereum.eth.sync.SynchronizerConfiguration;
-import org.hyperledger.besu.ethereum.eth.sync.common.checkpoint.Checkpoint;
 import org.hyperledger.besu.ethereum.eth.sync.common.checkpoint.ImmutableCheckpoint;
 import org.hyperledger.besu.ethereum.p2p.config.DiscoveryMode;
 import org.hyperledger.besu.ethereum.p2p.peers.EnodeURLImpl;
@@ -2245,42 +2244,39 @@ public class BesuCommandTest extends CommandTestAbstract {
   }
 
   @Test
-  public void checkpointOverrideSetWhenSpecified() {
+  public void checkpointOverridePassedWhenSpecified() {
+    // The default network (mainnet) has a genesis checkpoint, so this also verifies the CLI
+    // override
+    // takes precedence over the genesis checkpoint.
     final String hash = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
     final long blockNumber = 12345678L;
 
     parseCommand("--checkpoint=" + hash + ":" + blockNumber + ":1000000");
 
-    final ArgumentCaptor<Checkpoint> checkpointArg = ArgumentCaptor.forClass(Checkpoint.class);
-
-    verify(mockControllerBuilder).checkpointOverride(checkpointArg.capture());
+    verify(mockControllerBuilderFactory)
+        .checkpoint(
+            Optional.of(
+                ImmutableCheckpoint.builder()
+                    .blockHash(Hash.fromHexString(hash))
+                    .blockNumber(blockNumber)
+                    .totalDifficulty(Difficulty.of(1000000L))
+                    .build()));
     verify(mockControllerBuilder).build();
 
     assertThat(commandOutput.toString(UTF_8)).isEmpty();
     assertThat(commandErrorOutput.toString(UTF_8)).isEmpty();
-
-    assertThat(checkpointArg.getValue())
-        .isEqualTo(
-            ImmutableCheckpoint.builder()
-                .blockHash(Hash.fromHexString(hash))
-                .blockNumber(blockNumber)
-                .totalDifficulty(Difficulty.of(1000000L))
-                .build());
   }
 
   @Test
-  public void checkpointOverrideEmptyWhenNotSpecified() {
-    parseCommand();
+  public void checkpointEmptyWhenNoneConfigured() throws IOException {
+    final Path genesisFile = createFakeGenesisFile(GENESIS_VALID_JSON);
 
-    final ArgumentCaptor<Checkpoint> checkpointArg = ArgumentCaptor.forClass(Checkpoint.class);
+    parseCommand("--genesis-file", genesisFile.toString());
 
-    verify(mockControllerBuilder).checkpointOverride(checkpointArg.capture());
+    verify(mockControllerBuilderFactory).checkpoint(Optional.empty());
     verify(mockControllerBuilder).build();
 
-    assertThat(commandOutput.toString(UTF_8)).isEmpty();
     assertThat(commandErrorOutput.toString(UTF_8)).isEmpty();
-
-    assertThat(checkpointArg.getValue()).isNull();
   }
 
   @Test
@@ -2289,6 +2285,44 @@ public class BesuCommandTest extends CommandTestAbstract {
 
     assertThat(commandOutput.toString(UTF_8)).isEmpty();
     assertThat(commandErrorOutput.toString(UTF_8)).contains("Invalid checkpoint");
+  }
+
+  @Test
+  public void invalidGenesisCheckpointIsRejected() throws IOException {
+    final Path genesisFile = createFakeGenesisFile(genesisWithMalformedCheckpoint());
+
+    parseCommand("--genesis-file", genesisFile.toString());
+
+    assertThat(commandErrorOutput.toString(UTF_8))
+        .contains("The checkpoint block configured in the genesis file is not valid");
+  }
+
+  @Test
+  public void checkpointOverrideSkipsGenesisCheckpointValidation() throws IOException {
+    final Path genesisFile = createFakeGenesisFile(genesisWithMalformedCheckpoint());
+    final String hash = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+
+    parseCommand(
+        "--genesis-file", genesisFile.toString(), "--checkpoint=" + hash + ":12345678:1000000");
+
+    assertThat(commandErrorOutput.toString(UTF_8))
+        .doesNotContain("The checkpoint block configured in the genesis file is not valid");
+  }
+
+  private static JsonObject genesisWithMalformedCheckpoint() {
+    return new JsonObject()
+        .put(
+            "config",
+            new JsonObject()
+                .put("chainId", GENESIS_CONFIG_TEST_CHAINID)
+                .put(
+                    "checkpoint",
+                    new JsonObject()
+                        .put(
+                            "hash",
+                            "0x0000000000000000000000000000000000000000000000000000000000000001")
+                        .put("number", 100)
+                        .put("totalDifficulty", "not-a-number")));
   }
 
   @Test

@@ -14,8 +14,11 @@
  */
 package org.hyperledger.besu.ethereum.eth.sync.common.checkpoint;
 
+import org.hyperledger.besu.config.CheckpointConfigOptions;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.ethereum.core.Difficulty;
+
+import java.util.Optional;
 
 import org.immutables.value.Value;
 
@@ -71,5 +74,24 @@ public interface Checkpoint {
         .blockNumber(blockNumber)
         .totalDifficulty(difficulty)
         .build();
+  }
+
+  /**
+   * Builds a {@link Checkpoint} from the checkpoint configured in a genesis file, if one is fully
+   * specified. Delegates to {@link #of} so the same validation rules apply.
+   *
+   * @param checkpointConfigOptions the genesis-file checkpoint config
+   * @return the genesis checkpoint, or empty if the genesis file does not fully configure one
+   * @throws IllegalArgumentException if a configured checkpoint has malformed values
+   */
+  static Optional<Checkpoint> fromConfig(final CheckpointConfigOptions checkpointConfigOptions) {
+    if (!checkpointConfigOptions.isValid()) {
+      return Optional.empty();
+    }
+    return Optional.of(
+        of(
+            checkpointConfigOptions.getHash().get(),
+            checkpointConfigOptions.getNumber().getAsLong(),
+            checkpointConfigOptions.getTotalDifficulty().get()));
   }
 }
