@@ -123,7 +123,7 @@ public abstract class ApiConfiguration {
    */
   @Value.Default
   public Long getMaxLogsRange() {
-    return 5000L;
+    return DEFAULT_MAX_LOGS_RANGE;
   }
 
   /**
