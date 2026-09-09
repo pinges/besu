@@ -177,13 +177,31 @@ public class BackwardSyncContext {
     return status.currentFuture;
   }
 
+  /**
+   * The current backward sync session, starting one when there is none in flight.
+   *
+   * <p>A session whose future has already completed is not reused: {@code
+   * BackwardSyncAlgorithm.pickNextStep()} can finish a session on the calling thread, in which case
+   * the completion handler in {@link #prepareBackwardSyncFutureWithRetry()} clears the status
+   * before it is even published. Handing that finished session back would make every later {@code
+   * syncBackwardsUntil} return an already-completed future, so no backward sync would ever start
+   * again.
+   */
   private Status getOrStartSyncSession() {
-    Optional<Status> maybeCurrentStatus = Optional.ofNullable(this.currentBackwardSyncStatus.get());
+    Optional<Status> maybeCurrentStatus =
+        Optional.ofNullable(this.currentBackwardSyncStatus.get())
+            .filter(status -> !status.currentFuture.isDone());
     return maybeCurrentStatus.orElseGet(
         () -> {
           LOG.info("Starting a new backward sync session");
           Status newStatus = new Status(prepareBackwardSyncFutureWithRetry());
-          this.currentBackwardSyncStatus.set(newStatus);
+          // Only publish a session that is still running. A synchronously completed one has
+          // already had the status cleared by its own handler, and publishing it would park a
+          // finished session in the field for other readers — getStatus() hands it to
+          // BackwardSyncStep's progress logging, and maybeUpdateTargetHeight would mutate it.
+          if (!newStatus.currentFuture.isDone()) {
+            this.currentBackwardSyncStatus.set(newStatus);
+          }
           return newStatus;
         });
   }
