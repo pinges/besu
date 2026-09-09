@@ -453,6 +453,55 @@ public class SyncStateTest {
   }
 
   @Test
+  public void syncStatus_reportsProgressWhileSnapSyncingWithNoSyncTarget() {
+    // Snap sync never sets a sync target; it reports progress via setSyncProgress instead.
+    syncState.setSyncProgress(10L, 42L, 100L);
+
+    final Optional<SyncStatus> syncStatus = syncState.syncStatus();
+
+    assertThat(syncStatus).isPresent();
+    assertThat(syncStatus.get().getStartingBlock()).isEqualTo(10L);
+    assertThat(syncStatus.get().getCurrentBlock()).isEqualTo(42L);
+    assertThat(syncStatus.get().getHighestBlock()).isEqualTo(100L);
+  }
+
+  @Test
+  public void syncStatus_isEmptyOnceInitialSyncPhaseIsDone() {
+    syncState.setSyncProgress(10L, 42L, 100L);
+    assertThat(syncState.syncStatus()).isPresent();
+
+    syncState.markInitialSyncPhaseAsDone();
+
+    assertThat(syncState.syncStatus()).isEmpty();
+  }
+
+  @Test
+  public void syncStatus_prefersSyncTargetOverReportedProgress() {
+    syncState.setSyncProgress(10L, 42L, 100L);
+    syncState.setSyncTarget(syncTargetPeer.getEthPeer(), blockchain.getBlockHeader(3L).get());
+
+    final Optional<SyncStatus> syncStatus = syncState.syncStatus();
+
+    assertThat(syncStatus).isPresent();
+    assertThat(syncStatus.get().getStartingBlock()).isEqualTo(3L);
+    assertThat(syncStatus.get().getCurrentBlock()).isEqualTo(OUR_CHAIN_HEAD_NUMBER);
+    assertThat(syncStatus.get().getHighestBlock()).isEqualTo(TARGET_CHAIN_HEIGHT);
+  }
+
+  @Test
+  public void syncStatusListener_stillReceivesEmptyOnClearedTargetDespiteReportedProgress() {
+    // The syncStatus() fallback must not leak into listener notifications: an empty event is how
+    // subscribers learn that the sync target is gone.
+    syncState.setSyncProgress(10L, 42L, 100L);
+    syncState.setSyncTarget(syncTargetPeer.getEthPeer(), blockchain.getBlockHeader(3L).get());
+    syncState.clearSyncTarget();
+
+    verify(syncStatusListener, times(3)).onSyncStatusChanged(syncStatusCaptor.capture());
+
+    assertThat(syncStatusCaptor.getAllValues().getLast()).isEmpty();
+  }
+
+  @Test
   public void syncStatusListener_receivesEventWhenSyncTargetSet() {
     syncState.setSyncTarget(syncTargetPeer.getEthPeer(), blockchain.getBlockHeader(3L).get());
 

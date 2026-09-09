@@ -307,6 +307,38 @@ public class BackwardSyncContextTest {
   }
 
   @Test
+  public void isSyncingReturnsTrueWhileBackwardSyncSessionIsInFlight() {
+    when(backwardSyncAlgorithmFactory.createBackwardSyncAlgorithm(context))
+        .thenReturn(backwardSyncAlgorithm);
+    // A future that never completes keeps the sync session in flight for the test's duration.
+    when(backwardSyncAlgorithm.executeBackwardsSync(null)).thenReturn(new CompletableFuture<>());
+
+    context.syncBackwardsUntil(getRemoteBlockByNumber(REMOTE_HEIGHT));
+
+    assertThat(context.isSyncing()).isTrue();
+  }
+
+  @Test
+  public void isSyncingReturnsFalseWhenNoSessionHasStarted() {
+    assertThat(context.isSyncing()).isFalse();
+  }
+
+  @Test
+  public void isSyncingReturnsFalseAfterBackwardSyncSessionCompletes() throws Exception {
+    when(backwardSyncAlgorithmFactory.createBackwardSyncAlgorithm(context))
+        .thenReturn(backwardSyncAlgorithm);
+    when(backwardSyncAlgorithm.executeBackwardsSync(null))
+        .thenReturn(CompletableFuture.completedFuture(null));
+
+    final CompletableFuture<Void> future =
+        context.syncBackwardsUntil(getRemoteBlockByNumber(REMOTE_HEIGHT));
+    future.orTimeout(30, TimeUnit.SECONDS);
+    future.get();
+
+    assertThat(context.isSyncing()).isFalse();
+  }
+
+  @Test
   public void shouldQueueHashForSyncWhenNotReady() throws Exception {
     doReturn(false).when(context).isReady();
     when(backwardSyncAlgorithmFactory.createBackwardSyncAlgorithm(context))

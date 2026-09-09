@@ -69,6 +69,10 @@ public class SyncState implements NewPayloadListener {
   private volatile long lastPayloadBlockNumber = 0L;
   private volatile boolean payloadReceived = false;
 
+  // Progress reported by a sync that does not use a sync target, i.e. snap sync. Retained so that
+  // eth_syncing can report progress during the initial sync phase; cleared once that phase ends.
+  private volatile Optional<SyncStatus> targetlessSyncProgress = Optional.empty();
+
   public SyncState(final Blockchain blockchain, final EthPeers ethPeers) {
     this(blockchain, ethPeers, false, Optional.empty());
   }
@@ -161,8 +165,18 @@ public class SyncState implements NewPayloadListener {
     return completionListenerSubscribers.unsubscribe(listenerId);
   }
 
+  /**
+   * The current sync status, or empty when this node is not syncing.
+   *
+   * <p>Falls back to {@link #setSyncProgress(long, long, long)} reporting when no sync target is
+   * set. Snap sync does not use a sync target — only {@code PipelineChainDownloader}, used by full
+   * sync, sets one — so without this fallback {@code eth_syncing} reports "not syncing" for the
+   * whole of a snap sync.
+   *
+   * @return the current sync status, or empty when not syncing
+   */
   public Optional<SyncStatus> syncStatus() {
-    return syncStatus(syncTarget);
+    return syncStatus(syncTarget).or(() -> targetlessSyncProgress);
   }
 
   public Optional<SyncTarget> syncTarget() {
@@ -179,6 +193,7 @@ public class SyncState implements NewPayloadListener {
     final SyncStatus status =
         new DefaultSyncStatus(
             startingBlock, currentBlock, highestBlock, Optional.empty(), Optional.empty());
+    targetlessSyncProgress = Optional.of(status);
     syncStatusListeners.forEach(c -> c.onSyncStatusChanged(Optional.of(status)));
   }
 
@@ -358,6 +373,9 @@ public class SyncState implements NewPayloadListener {
   public void markInitialSyncPhaseAsDone() {
     isInitialSyncPhaseDone = true;
     isResyncNeeded = false;
+    // Otherwise the last progress reported by snap sync would be returned by syncStatus() forever,
+    // making eth_syncing report a permanently in-progress sync.
+    targetlessSyncProgress = Optional.empty();
     completionListenerSubscribers.forEach(InitialSyncCompletionListener::onInitialSyncCompleted);
   }
 

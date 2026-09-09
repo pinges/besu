@@ -111,9 +111,20 @@ public class BackwardSyncContext {
     this.maxBadChainEventEntries = maxBadChainEventEntries;
   }
 
+  /**
+   * Whether a backward sync session is currently in flight.
+   *
+   * <p>A session is represented by a non-null {@code currentBackwardSyncStatus} whose future has
+   * not yet completed. The status is cleared from within the completion handler of that same future
+   * (see {@link #prepareBackwardSyncFutureWithRetry()}), so the {@code isDone} check also guards
+   * the case where a synchronously completing future is overwritten by {@link
+   * #getOrStartSyncSession()} after the handler has already cleared the status.
+   *
+   * @return true while a backward sync session is running, false otherwise
+   */
   public synchronized boolean isSyncing() {
     return Optional.ofNullable(currentBackwardSyncStatus.get())
-        .map(status -> status.currentFuture.isDone())
+        .map(status -> !status.currentFuture.isDone())
         .orElse(Boolean.FALSE);
   }
 
