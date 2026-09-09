@@ -87,7 +87,7 @@ public class ReadinessCheckPlugin implements BesuPlugin {
   // because the completion event fires when the synchronizer starts and would be missed by a
   // listener on a node whose synchronizer never starts (P2P disabled). Empty when the service is
   // unavailable, in which case the check is skipped.
-  private Optional<SynchronizationService> synchronizationService = Optional.empty();
+  private volatile Optional<SynchronizationService> synchronizationService = Optional.empty();
 
   @Override
   public void register(final ServiceManager context) {

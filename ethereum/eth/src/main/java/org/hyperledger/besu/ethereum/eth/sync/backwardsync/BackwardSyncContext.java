@@ -201,6 +201,13 @@ public class BackwardSyncContext {
           // BackwardSyncStep's progress logging, and maybeUpdateTargetHeight would mutate it.
           if (!newStatus.currentFuture.isDone()) {
             this.currentBackwardSyncStatus.set(newStatus);
+            // The future can complete between the check above and the publish, in which case its
+            // handler has already cleared the field and we have just re-published a finished
+            // session. compareAndSet retracts only our own status, so a session started in the
+            // meantime is left alone.
+            if (newStatus.currentFuture.isDone()) {
+              this.currentBackwardSyncStatus.compareAndSet(newStatus, null);
+            }
           }
           return newStatus;
         });
