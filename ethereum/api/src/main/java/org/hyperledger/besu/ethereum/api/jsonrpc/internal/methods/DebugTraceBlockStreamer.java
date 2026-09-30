@@ -38,7 +38,6 @@ import org.hyperledger.besu.evm.account.MutableAccount;
 import org.hyperledger.besu.evm.blockhash.BlockHashLookup;
 import org.hyperledger.besu.evm.frame.ExceptionalHaltReason;
 import org.hyperledger.besu.evm.frame.MessageFrame;
-import org.hyperledger.besu.evm.tracing.OpCodeTracerConfigBuilder;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -92,10 +91,16 @@ public class DebugTraceBlockStreamer {
   private static final byte ARR_CLOSE = ']';
 
   private final Block block;
+
+  /**
+   * Caller-supplied options with the server step ceiling already applied. Every tracer built here —
+   * streaming and accumulating alike — is constructed from this, so no request path can exceed the
+   * configured ceiling.
+   */
   private final TraceOptions traceOptions;
+
   private final ProtocolSchedule protocolSchedule;
   private final BlockchainQueries blockchainQueries;
-  private final long serverStepLimit;
 
   private final byte[] numBuf = new byte[20];
   private final byte[] writeBuf = new byte[BUF_SIZE];
@@ -122,10 +127,9 @@ public class DebugTraceBlockStreamer {
       final BlockchainQueries blockchainQueries,
       final long serverStepLimit) {
     this.block = block;
-    this.traceOptions = traceOptions;
+    this.traceOptions = TraceStepLimit.clamp(traceOptions, serverStepLimit);
     this.protocolSchedule = protocolSchedule;
     this.blockchainQueries = blockchainQueries;
-    this.serverStepLimit = serverStepLimit;
   }
 
   // ── unsynchronized buffer management ──────────────────────────────
@@ -299,7 +303,7 @@ public class DebugTraceBlockStreamer {
 
     final StreamingDebugOperationTracer tracer =
         new StreamingDebugOperationTracer(
-            clampedTracerConfig(),
+            traceOptions.opCodeTracerConfig(),
             true,
             (pc, opcode, gasRemaining, gasCost, depth, stack, frame, halt, revert) ->
                 writeStructLog(
@@ -539,22 +543,5 @@ public class DebugTraceBlockStreamer {
 
   private void writeAscii(final String s) throws IOException {
     writeBytes(s.getBytes(StandardCharsets.US_ASCII));
-  }
-
-  private OpCodeTracerConfigBuilder.OpCodeTracerConfig clampedTracerConfig() {
-    if (serverStepLimit <= 0) {
-      return traceOptions.opCodeTracerConfig();
-    }
-    final int callerLimit = traceOptions.opCodeTracerConfig().limit();
-    final int effectiveLimit =
-        callerLimit > 0
-            ? (int) Math.min(callerLimit, Math.min(serverStepLimit, Integer.MAX_VALUE))
-            : (int) Math.min(serverStepLimit, Integer.MAX_VALUE);
-    if (effectiveLimit == callerLimit) {
-      return traceOptions.opCodeTracerConfig();
-    }
-    return OpCodeTracerConfigBuilder.createFrom(traceOptions.opCodeTracerConfig())
-        .limit(effectiveLimit)
-        .build();
   }
 }

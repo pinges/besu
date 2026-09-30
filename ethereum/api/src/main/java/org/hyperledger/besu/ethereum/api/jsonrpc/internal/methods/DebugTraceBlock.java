@@ -20,6 +20,8 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.exception.InvalidJsonRpcParameters;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.JsonRpcParameter.JsonRpcParameterException;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcResponse;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.core.Block;
@@ -69,55 +71,31 @@ public class DebugTraceBlock extends AbstractDebugTraceBlock {
     return RpcMethod.DEBUG_TRACE_BLOCK.getMethodName();
   }
 
-  @Override
-  protected Optional<Block> findBlock(final JsonRpcRequestContext request) {
-    try {
-      final String input = request.getRequiredParameter(0, String.class);
-      final Block block =
-          Block.readFrom(RLP.input(Bytes.fromHexString(input)), this.blockHeaderFunctions);
-      if (getBlockchainQueries()
-          .getBlockchain()
-          .getBlockByHash(block.getHeader().getParentHash())
-          .isEmpty()) {
-        return Optional.empty();
-      }
-      if (block.getBody().getTransactions().size() > MAX_TRACE_BLOCK_TX_COUNT) {
-        LOG.warn(
-            "debug_traceBlock rejected: tx count {} exceeds limit {}",
-            block.getBody().getTransactions().size(),
-            MAX_TRACE_BLOCK_TX_COUNT);
-        return Optional.empty();
-      }
-      if (block.getHeader().getGasLimit() > MAX_TRACE_BLOCK_GAS_LIMIT) {
-        LOG.warn(
-            "debug_traceBlock rejected: gasLimit {} exceeds limit {}",
-            block.getHeader().getGasLimit(),
-            MAX_TRACE_BLOCK_GAS_LIMIT);
-        return Optional.empty();
-      }
-      return Optional.of(block);
-    } catch (final RLPException | IllegalArgumentException | JsonRpcParameterException e) {
-      LOG.debug("Failed to resolve block for batch trace request", e);
-      return Optional.empty();
+  /**
+   * The outcome of resolving the caller-supplied block parameter: either an accepted block or the
+   * error type the caller must be told about. Both the streaming and the batch path go through
+   * this, so a request rejected by one is rejected identically by the other — returning {@code
+   * result: null} for an oversized block would hide the reason the trace was refused.
+   */
+  private record ResolvedBlock(Optional<Block> block, Optional<RpcErrorType> error) {
+    static ResolvedBlock accepted(final Block block) {
+      return new ResolvedBlock(Optional.of(block), Optional.empty());
+    }
+
+    static ResolvedBlock rejected(final RpcErrorType error) {
+      return new ResolvedBlock(Optional.empty(), Optional.of(error));
     }
   }
 
-  @Override
-  public void streamResponse(
-      final JsonRpcRequestContext requestContext, final OutputStream out, final ObjectMapper mapper)
-      throws IOException {
+  private ResolvedBlock resolveBlock(final JsonRpcRequestContext request) {
     final Block block;
     try {
-      final String input = requestContext.getRequiredParameter(0, String.class);
+      final String input = request.getRequiredParameter(0, String.class);
       block = Block.readFrom(RLP.input(Bytes.fromHexString(input)), this.blockHeaderFunctions);
     } catch (final RLPException | IllegalArgumentException e) {
       LOG.debug("Failed to parse block RLP (index 0)", e);
-      mapper.writeValue(
-          out,
-          new JsonRpcErrorResponse(
-              requestContext.getRequest().getId(), RpcErrorType.INVALID_BLOCK_PARAMS));
-      return;
-    } catch (JsonRpcParameterException e) {
+      return ResolvedBlock.rejected(RpcErrorType.INVALID_BLOCK_PARAMS);
+    } catch (final JsonRpcParameterException e) {
       throw new InvalidJsonRpcParameters(
           "Invalid block params (index 0)", RpcErrorType.INVALID_BLOCK_PARAMS, e);
     }
@@ -127,11 +105,7 @@ public class DebugTraceBlock extends AbstractDebugTraceBlock {
           "debug_traceBlock rejected: tx count {} exceeds limit {}",
           block.getBody().getTransactions().size(),
           MAX_TRACE_BLOCK_TX_COUNT);
-      mapper.writeValue(
-          out,
-          new JsonRpcErrorResponse(
-              requestContext.getRequest().getId(), RpcErrorType.EXCEEDS_RPC_TRACE_BLOCK_TX_COUNT));
-      return;
+      return ResolvedBlock.rejected(RpcErrorType.EXCEEDS_RPC_TRACE_BLOCK_TX_COUNT);
     }
 
     if (block.getHeader().getGasLimit() > MAX_TRACE_BLOCK_GAS_LIMIT) {
@@ -139,28 +113,51 @@ public class DebugTraceBlock extends AbstractDebugTraceBlock {
           "debug_traceBlock rejected: gasLimit {} exceeds limit {}",
           block.getHeader().getGasLimit(),
           MAX_TRACE_BLOCK_GAS_LIMIT);
-      mapper.writeValue(
-          out,
-          new JsonRpcErrorResponse(
-              requestContext.getRequest().getId(), RpcErrorType.EXCEEDS_RPC_TRACE_BLOCK_GAS_LIMIT));
-      return;
+      return ResolvedBlock.rejected(RpcErrorType.EXCEEDS_RPC_TRACE_BLOCK_GAS_LIMIT);
     }
-
-    final TraceOptions traceOptions = getTraceOptions(requestContext);
 
     if (getBlockchainQueries()
         .getBlockchain()
         .getBlockByHash(block.getHeader().getParentHash())
-        .isPresent()) {
-      final DebugTraceBlockStreamer streamer =
-          createStreamer(traceOptions, Optional.ofNullable(block));
-      writeStreamingResponse(
-          requestContext.getRequest().getId(), streamer, out, mapper, requestContext::isAlive);
-    } else {
+        .isEmpty()) {
+      return ResolvedBlock.rejected(RpcErrorType.PARENT_BLOCK_NOT_FOUND);
+    }
+
+    return ResolvedBlock.accepted(block);
+  }
+
+  @Override
+  protected Optional<Block> findBlock(final JsonRpcRequestContext request) {
+    return resolveBlock(request).block();
+  }
+
+  @Override
+  public JsonRpcResponse response(final JsonRpcRequestContext request) {
+    final ResolvedBlock resolved = resolveBlock(request);
+    if (resolved.error().isPresent()) {
+      return new JsonRpcErrorResponse(request.getRequest().getId(), resolved.error().get());
+    }
+    final TraceOptions traceOptions = getTraceOptions(request);
+    final DebugTraceBlockStreamer streamer = createStreamer(traceOptions, resolved.block());
+    return new JsonRpcSuccessResponse(
+        request.getRequest().getId(), streamer.accumulateAll(request::isAlive));
+  }
+
+  @Override
+  public void streamResponse(
+      final JsonRpcRequestContext requestContext, final OutputStream out, final ObjectMapper mapper)
+      throws IOException {
+    final ResolvedBlock resolved = resolveBlock(requestContext);
+    if (resolved.error().isPresent()) {
       mapper.writeValue(
           out,
-          new JsonRpcErrorResponse(
-              requestContext.getRequest().getId(), RpcErrorType.PARENT_BLOCK_NOT_FOUND));
+          new JsonRpcErrorResponse(requestContext.getRequest().getId(), resolved.error().get()));
+      return;
     }
+
+    final TraceOptions traceOptions = getTraceOptions(requestContext);
+    final DebugTraceBlockStreamer streamer = createStreamer(traceOptions, resolved.block());
+    writeStreamingResponse(
+        requestContext.getRequest().getId(), streamer, out, mapper, requestContext::isAlive);
   }
 }

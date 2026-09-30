@@ -29,8 +29,10 @@ import org.hyperledger.besu.datatypes.Wei;
 import org.hyperledger.besu.ethereum.api.ImmutableApiConfiguration;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequest;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.core.Block;
 import org.hyperledger.besu.ethereum.core.BlockBody;
@@ -254,6 +256,105 @@ public class DebugTraceBlockTest {
     assertThat(structLogs.size())
         .as("server step limit of 3 should cap structLogs at 3 entries (contract has 9 opcodes)")
         .isEqualTo(3);
+  }
+
+  @Test
+  public void batchServerStepLimitShouldTruncateStructLogs() throws IOException {
+    final BlockchainQueries blockchainQueries =
+        new BlockchainQueries(
+            fixture.getProtocolSchedule(),
+            fixture.getBlockchain(),
+            fixture.getStateArchive(),
+            MiningConfiguration.MINING_DISABLED);
+
+    final DebugTraceBlock limitedMethod =
+        new DebugTraceBlock(
+            fixture.getProtocolSchedule(),
+            blockchainQueries,
+            ImmutableApiConfiguration.builder().debugTraceStepLimit(3L).build());
+
+    final Object[] params = new Object[] {testBlock.toRlp().toString()};
+    final JsonRpcRequestContext request =
+        new JsonRpcRequestContext(new JsonRpcRequest("2.0", "debug_traceBlock", params));
+
+    final JsonRpcResponse response = limitedMethod.response(request);
+    assertThat(response).isInstanceOf(JsonRpcSuccessResponse.class);
+    final JsonNode result =
+        mapper.readTree(mapper.writeValueAsBytes(((JsonRpcSuccessResponse) response).getResult()));
+    final JsonNode structLogs = result.get(0).get("result").get("structLogs");
+    assertThat(structLogs.isArray()).isTrue();
+    assertThat(structLogs.size())
+        .as("the accumulating path must honour the server step limit, not just the streaming path")
+        .isEqualTo(3);
+  }
+
+  @Test
+  public void batchShouldReturnLimitErrorForBlockExceedingTransactionCount() {
+    final List<Transaction> manyTxs =
+        Collections.nCopies(DebugTraceBlock.MAX_TRACE_BLOCK_TX_COUNT + 1, testTransaction);
+
+    final BlockHeader header =
+        new BlockHeaderTestFixture()
+            .number(1)
+            .parentHash(fixture.getBlockchain().getChainHeadHash())
+            .gasLimit(30_000_000L)
+            .baseFeePerGas(Wei.of(7))
+            .buildHeader();
+    final Block oversizedBlock =
+        new Block(header, new BlockBody(manyTxs, List.of(), Optional.empty()));
+
+    final Object[] params = new Object[] {oversizedBlock.toRlp().toString()};
+    final JsonRpcRequestContext request =
+        new JsonRpcRequestContext(new JsonRpcRequest("2.0", "debug_traceBlock", params));
+
+    final JsonRpcResponse response = debugTraceBlock.response(request);
+    assertThat(response).isInstanceOf(JsonRpcErrorResponse.class);
+    assertThat(((JsonRpcErrorResponse) response).getErrorType())
+        .isEqualTo(RpcErrorType.EXCEEDS_RPC_TRACE_BLOCK_TX_COUNT);
+  }
+
+  @Test
+  public void batchShouldReturnLimitErrorForBlockExceedingGasLimit() {
+    final BlockHeader oversizedHeader =
+        new BlockHeaderTestFixture()
+            .number(1)
+            .parentHash(fixture.getBlockchain().getChainHeadHash())
+            .gasLimit(DebugTraceBlock.MAX_TRACE_BLOCK_GAS_LIMIT + 1)
+            .baseFeePerGas(Wei.of(7))
+            .buildHeader();
+    final Block oversizedBlock =
+        new Block(oversizedHeader, new BlockBody(List.of(), List.of(), Optional.empty()));
+
+    final Object[] params = new Object[] {oversizedBlock.toRlp().toString()};
+    final JsonRpcRequestContext request =
+        new JsonRpcRequestContext(new JsonRpcRequest("2.0", "debug_traceBlock", params));
+
+    final JsonRpcResponse response = debugTraceBlock.response(request);
+    assertThat(response).isInstanceOf(JsonRpcErrorResponse.class);
+    assertThat(((JsonRpcErrorResponse) response).getErrorType())
+        .isEqualTo(RpcErrorType.EXCEEDS_RPC_TRACE_BLOCK_GAS_LIMIT);
+  }
+
+  @Test
+  public void batchShouldReturnErrorResponseWhenParentBlockMissing() {
+    final BlockHeader orphanHeader =
+        new BlockHeaderTestFixture()
+            .number(1)
+            .parentHash(Hash.ZERO)
+            .gasLimit(30_000_000L)
+            .baseFeePerGas(Wei.of(7))
+            .buildHeader();
+    final Block orphanBlock =
+        new Block(orphanHeader, new BlockBody(List.of(), List.of(), Optional.empty()));
+
+    final Object[] params = new Object[] {orphanBlock.toRlp().toString()};
+    final JsonRpcRequestContext request =
+        new JsonRpcRequestContext(new JsonRpcRequest("2.0", "debug_traceBlock", params));
+
+    final JsonRpcResponse response = debugTraceBlock.response(request);
+    assertThat(response).isInstanceOf(JsonRpcErrorResponse.class);
+    assertThat(((JsonRpcErrorResponse) response).getErrorType())
+        .isEqualTo(RpcErrorType.PARENT_BLOCK_NOT_FOUND);
   }
 
   @Test

@@ -32,8 +32,6 @@ import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.api.query.TransactionWithMetadata;
 import org.hyperledger.besu.ethereum.debug.TraceOptions;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
-import org.hyperledger.besu.ethereum.vm.DebugOperationTracer;
-import org.hyperledger.besu.evm.tracing.OpCodeTracerConfigBuilder;
 
 import java.util.Optional;
 
@@ -116,8 +114,11 @@ public class DebugTraceTransaction implements JsonRpcMethod {
       final TraceOptions traceOptions) {
     final Hash blockHash = transactionWithMetadata.getBlockHash().get();
 
-    final DebugOperationTracer execTracer =
-        new DebugOperationTracer(applyServerStepLimit(traceOptions).opCodeTracerConfig(), true);
+    // Clamp before the step is built: the step owns the tracer that its result builder reads back,
+    // so the same instance must both drive execution and produce the result. Substituting a
+    // separately-built tracer leaves callTracer/prestateTracer/4byteTracer/flatCallTracer with no
+    // callbacks at all.
+    final TraceOptions clampedOptions = TraceStepLimit.clamp(traceOptions, serverStepLimit);
 
     return blockchain
         .getBlockchain()
@@ -126,38 +127,16 @@ public class DebugTraceTransaction implements JsonRpcMethod {
         .flatMap(
             protocolSpec -> {
               final DebugTraceTransactionStep step =
-                  DebugTraceTransactionStep.of(traceOptions, protocolSpec);
+                  DebugTraceTransactionStep.of(clampedOptions, protocolSpec);
               return Tracer.processTracing(
                   blockchain,
                   blockHash,
                   mutableWorldState ->
                       transactionTracer
-                          .traceTransaction(mutableWorldState, blockHash, txHash, execTracer)
+                          .traceTransaction(
+                              mutableWorldState, blockHash, txHash, step.getOperationTracer())
                           .map(step::buildResult));
             })
         .orElse(null);
-  }
-
-  private TraceOptions applyServerStepLimit(final TraceOptions traceOptions) {
-    if (serverStepLimit <= 0) {
-      return traceOptions;
-    }
-    final int callerLimit = traceOptions.opCodeTracerConfig().limit();
-    final int effectiveLimit =
-        callerLimit > 0
-            ? (int) Math.min(callerLimit, Math.min(serverStepLimit, Integer.MAX_VALUE))
-            : (int) Math.min(serverStepLimit, Integer.MAX_VALUE);
-    if (effectiveLimit == callerLimit) {
-      return traceOptions;
-    }
-    final var newConfig =
-        OpCodeTracerConfigBuilder.createFrom(traceOptions.opCodeTracerConfig())
-            .limit(effectiveLimit)
-            .build();
-    return new TraceOptions(
-        traceOptions.tracerType(),
-        newConfig,
-        traceOptions.tracerConfig(),
-        traceOptions.stateOverrides());
   }
 }
