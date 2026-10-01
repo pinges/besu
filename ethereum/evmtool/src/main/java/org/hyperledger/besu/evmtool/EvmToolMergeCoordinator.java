@@ -188,7 +188,8 @@ public class EvmToolMergeCoordinator implements MergeMiningCoordinator {
   }
 
   @Override
-  public CompletableFuture<Void> appendNewPayloadToSync(final Block newPayload) {
+  public CompletableFuture<Void> appendNewPayloadToSync(
+      final Block newPayload, final Optional<BlockAccessList> blockAccessList) {
     return CompletableFuture.completedFuture(null);
   }
 

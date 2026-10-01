@@ -823,8 +823,9 @@ public class MergeCoordinator implements MergeMiningCoordinator, BadChainListene
   }
 
   @Override
-  public CompletableFuture<Void> appendNewPayloadToSync(final Block newPayload) {
-    return backwardSyncContext.syncBackwardsUntil(newPayload);
+  public CompletableFuture<Void> appendNewPayloadToSync(
+      final Block newPayload, final Optional<BlockAccessList> blockAccessList) {
+    return backwardSyncContext.syncBackwardsUntil(newPayload, blockAccessList);
   }
 
   @Override

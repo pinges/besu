@@ -364,7 +364,7 @@ public class EngineNewPayloadV1Test extends AbstractScheduledApiTest {
   public void shouldRespondWithSyncingDuringBackwardsSync() {
     BlockHeader mockHeader = createBlockHeader(getMinSupportedTimestamp());
     when(mergeContext.isInitialSyncDone()).thenReturn(true);
-    when(mergeCoordinator.appendNewPayloadToSync(any()))
+    when(mergeCoordinator.appendNewPayloadToSync(any(), any()))
         .thenReturn(CompletableFuture.completedFuture(null));
     var resp = resp(requestParams(mockEnginePayloadParam(mockHeader, emptyList())));
 
@@ -372,7 +372,7 @@ public class EngineNewPayloadV1Test extends AbstractScheduledApiTest {
     assertThat(res.getLatestValidHash()).isEmpty();
     assertThat(res.getStatus()).isEqualTo(SYNCING);
     assertThat(res.getError()).isNull();
-    verify(mergeCoordinator).appendNewPayloadToSync(any());
+    verify(mergeCoordinator).appendNewPayloadToSync(any(), any());
     verify(engineCallListener, times(1)).executionEngineCalled();
   }
 
@@ -386,7 +386,7 @@ public class EngineNewPayloadV1Test extends AbstractScheduledApiTest {
     assertThat(res.getLatestValidHash()).isEmpty();
     assertThat(res.getStatus()).isEqualTo(SYNCING);
     assertThat(res.getError()).isNull();
-    verify(mergeCoordinator, never()).appendNewPayloadToSync(any());
+    verify(mergeCoordinator, never()).appendNewPayloadToSync(any(), any());
     verify(engineCallListener, times(1)).executionEngineCalled();
   }
 
@@ -441,7 +441,7 @@ public class EngineNewPayloadV1Test extends AbstractScheduledApiTest {
     assertThat(res.getError())
         .isEqualTo("Block descends from bad block " + badParentHeader.toLogString());
     assertThat(badBlockManager.isBadBlock(childHeader.getHash())).isTrue();
-    verify(mergeCoordinator, never()).appendNewPayloadToSync(any());
+    verify(mergeCoordinator, never()).appendNewPayloadToSync(any(), any());
     verify(engineCallListener, times(1)).executionEngineCalled();
   }
 

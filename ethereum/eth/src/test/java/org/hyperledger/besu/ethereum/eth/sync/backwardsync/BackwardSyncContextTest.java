@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hyperledger.besu.ethereum.core.InMemoryKeyValueStorageProvider.createInMemoryBlockchain;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
@@ -179,7 +180,7 @@ public class BackwardSyncContextTest {
     EthProtocolManagerTestUtil.createPeer(ethProtocolManager);
     EthContext ethContext = ethProtocolManager.ethContext();
 
-    when(blockValidator.validateAndProcessBlock(any(), any(), any(), any()))
+    when(blockValidator.validateAndProcessBlock(any(), any(), any(), any(), any(), anyBoolean()))
         .thenAnswer(
             invocation -> {
               final Object[] arguments = invocation.getArguments();
@@ -234,14 +235,14 @@ public class BackwardSyncContextTest {
     doReturn(blockValidator).when(context).getBlockValidatorForBlock(any());
     doReturn(BlockProcessingResult.worldStateUnavailable("parent world state is not available"))
         .when(blockValidator)
-        .validateAndProcessBlock(any(), any(), any(), any());
+        .validateAndProcessBlock(any(), any(), any(), any(), any(), anyBoolean());
 
     final List<LogEvent> events =
         withLogCapture(
             BackwardSyncContext.class,
             () -> {
               for (final Block attempted : List.of(block, block, block, otherBlock)) {
-                assertThatThrownBy(() -> context.saveBlock(attempted))
+                assertThatThrownBy(() -> context.saveBlock(attempted, Optional.empty()))
                     .isInstanceOf(BackwardSyncException.class);
               }
             });
@@ -527,9 +528,11 @@ public class BackwardSyncContextTest {
     BlockProcessingResult result = new BlockProcessingResult("custom error");
     // the validator records an invalid block as bad
     badBlockManager.addBadBlock(block, BadBlockCause.fromValidationFailure("custom error"));
-    doReturn(result).when(blockValidator).validateAndProcessBlock(any(), any(), any(), any());
+    doReturn(result)
+        .when(blockValidator)
+        .validateAndProcessBlock(any(), any(), any(), any(), any(), anyBoolean());
 
-    assertThatThrownBy(() -> context.saveBlock(block))
+    assertThatThrownBy(() -> context.saveBlock(block, Optional.empty()))
         .isInstanceOf(BackwardSyncException.class)
         .hasMessageContaining("custom error");
 
@@ -555,9 +558,12 @@ public class BackwardSyncContextTest {
     doReturn(blockValidator).when(context).getBlockValidatorForBlock(any());
     BlockProcessingResult result =
         new BlockProcessingResult(Optional.empty(), new StorageException("database bedlam"));
-    doReturn(result).when(blockValidator).validateAndProcessBlock(any(), any(), any(), any());
+    doReturn(result)
+        .when(blockValidator)
+        .validateAndProcessBlock(any(), any(), any(), any(), any(), anyBoolean());
 
-    assertThatThrownBy(() -> context.saveBlock(block)).isInstanceOf(BackwardSyncException.class);
+    assertThatThrownBy(() -> context.saveBlock(block, Optional.empty()))
+        .isInstanceOf(BackwardSyncException.class);
 
     verify(badChainListener, never()).onBadChain(any(), any(), any());
   }
@@ -583,9 +589,11 @@ public class BackwardSyncContextTest {
     BlockProcessingResult result = new BlockProcessingResult("custom error");
     // the validator records an invalid block as bad
     badBlockManager.addBadBlock(block, BadBlockCause.fromValidationFailure("custom error"));
-    doReturn(result).when(blockValidator).validateAndProcessBlock(any(), any(), any(), any());
+    doReturn(result)
+        .when(blockValidator)
+        .validateAndProcessBlock(any(), any(), any(), any(), any(), anyBoolean());
 
-    assertThatThrownBy(() -> context.saveBlock(block))
+    assertThatThrownBy(() -> context.saveBlock(block, Optional.empty()))
         .isInstanceOf(BackwardSyncException.class)
         .hasMessageContaining("custom error");
 
@@ -620,9 +628,11 @@ public class BackwardSyncContextTest {
     BlockProcessingResult result = new BlockProcessingResult("custom error");
     // the validator records an invalid block as bad
     badBlockManager.addBadBlock(block, BadBlockCause.fromValidationFailure("custom error"));
-    doReturn(result).when(blockValidator).validateAndProcessBlock(any(), any(), any(), any());
+    doReturn(result)
+        .when(blockValidator)
+        .validateAndProcessBlock(any(), any(), any(), any(), any(), anyBoolean());
 
-    assertThatThrownBy(() -> context.saveBlock(block))
+    assertThatThrownBy(() -> context.saveBlock(block, Optional.empty()))
         .isInstanceOf(BackwardSyncException.class)
         .hasMessageContaining("custom error");
 

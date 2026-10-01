@@ -180,8 +180,9 @@ public class TransitionCoordinator extends TransitionUtils<MiningCoordinator>
   }
 
   @Override
-  public CompletableFuture<Void> appendNewPayloadToSync(final Block newPayload) {
-    return mergeCoordinator.appendNewPayloadToSync(newPayload);
+  public CompletableFuture<Void> appendNewPayloadToSync(
+      final Block newPayload, final Optional<BlockAccessList> blockAccessList) {
+    return mergeCoordinator.appendNewPayloadToSync(newPayload, blockAccessList);
   }
 
   @Override

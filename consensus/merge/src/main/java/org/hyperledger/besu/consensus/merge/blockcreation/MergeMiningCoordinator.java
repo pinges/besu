@@ -175,9 +175,11 @@ public interface MergeMiningCoordinator extends MiningCoordinator {
    * Append new payload to sync.
    *
    * @param newPayload the new payload
+   * @param blockAccessList the block access list received with the payload, if any
    * @return the completable future
    */
-  CompletableFuture<Void> appendNewPayloadToSync(Block newPayload);
+  CompletableFuture<Void> appendNewPayloadToSync(
+      Block newPayload, Optional<BlockAccessList> blockAccessList);
 
   /**
    * Gets or sync head by hash.

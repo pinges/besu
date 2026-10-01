@@ -212,7 +212,7 @@ public sealed class EngineNewPayloadV1<
           .setMessage("Parent of block {} is not present, append it to backward sync")
           .addArgument(unvalidatedBlock::toLogString)
           .log();
-      mergeCoordinator.appendNewPayloadToSync(unvalidatedBlock);
+      appendNewPayloadToSync(unvalidatedBlock, blockParam);
     }
 
     final ProtocolSpec protocolSpec = protocolSchedule.getByBlockHeader(newBlockHeader);
@@ -525,6 +525,10 @@ public sealed class EngineNewPayloadV1<
 
   protected BlockProcessingResult rememberBlock(final Block block, final EP executionPayload) {
     return mergeCoordinator.rememberBlock(block, Optional.empty());
+  }
+
+  protected void appendNewPayloadToSync(final Block block, final EP executionPayload) {
+    mergeCoordinator.appendNewPayloadToSync(block, Optional.empty());
   }
 
   private void logImportedBlockInfo(
