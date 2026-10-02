@@ -31,6 +31,7 @@
 - JSON-RPC response streaming no longer parks a Vert.x worker thread for the full backpressure timeout after the client has gone away, so a client that stops reading a large response can no longer starve the worker pool that also serves the Engine API. [#11146](https://github.com/besu-eth/besu/pull/11146)
 - Every method advertised by `engine_exchangeCapabilities` is now registered: on networks without Amsterdam the Amsterdam engine methods answer `-38005 Unsupported fork` where a fork check applies, instead of `-32604 Method not enabled`, and `engine_getBlobsV4` is served from Osaka on. [#11425](https://github.com/besu-eth/besu/pull/11425)
 - The transaction pool is no longer disabled, leaving built blocks empty and `engine_getBlobs` returning null, when peers on a different chain report a higher head than the one the consensus client is driving. [#11424](https://github.com/besu-eth/besu/pull/11424)
+- `trace_callMany` now answers a bundle with an invalid call with a JSON-RPC error. Previously it returned the complete error response (`{"jsonrpc":"2.0","id":1,"error":{...}}`) as the `result` of a successful response. An unavailable world state now returns `World state unavailable` instead of a `null` result. [#11401](https://github.com/besu-eth/besu/pull/11401)
 
 ### Additions and Improvements
 - Update `Bouncycastle` to 1.85 to address CVEs `CVE-2026-8763` and `CVE-2026-13506`. [#11336](https://github.com/besu-eth/besu/pull/11336)
