@@ -36,11 +36,12 @@ import org.hyperledger.besu.ethereum.api.query.TransactionWithMetadata;
 import org.hyperledger.besu.ethereum.core.LogWithMetadata;
 import org.hyperledger.besu.ethereum.core.Synchronizer;
 import org.hyperledger.besu.ethereum.core.Transaction;
+import org.hyperledger.besu.ethereum.core.encoding.EncodingContext;
+import org.hyperledger.besu.ethereum.core.encoding.TransactionDecoder;
 import org.hyperledger.besu.ethereum.eth.EthProtocol;
 import org.hyperledger.besu.ethereum.eth.transactions.TransactionPool;
 import org.hyperledger.besu.ethereum.mainnet.ValidationResult;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.Capability;
-import org.hyperledger.besu.ethereum.rlp.RLP;
 import org.hyperledger.besu.ethereum.rlp.RLPException;
 import org.hyperledger.besu.ethereum.transaction.TransactionInvalidReason;
 import org.hyperledger.besu.evm.account.Account;
@@ -152,7 +153,8 @@ public class GraphQLDataFetchers {
             dataFetchingEnvironment.getGraphQlContext().get(GraphQLContextType.TRANSACTION_POOL);
         final Bytes rawTran = dataFetchingEnvironment.getArgument("data");
 
-        final Transaction transaction = Transaction.readFrom(RLP.input(rawTran));
+        final Transaction transaction =
+            TransactionDecoder.decodeOpaqueBytes(rawTran, EncodingContext.POOLED_TRANSACTION);
         final ValidationResult<TransactionInvalidReason> validationResult =
             transactionPool.addTransactionViaApi(transaction);
         if (validationResult.isValid()) {
@@ -380,7 +382,15 @@ public class GraphQLDataFetchers {
       final long fromBlock = (Long) filter.getOrDefault("fromBlock", currentBlock);
       final long toBlock = (Long) filter.getOrDefault("toBlock", currentBlock);
 
+      if (fromBlock < 0) {
+        throw new GraphQLException(GraphQLError.INVALID_PARAMS);
+      }
       if (fromBlock > toBlock) {
+        throw new GraphQLException(GraphQLError.INVALID_PARAMS);
+      }
+      // Checked on the caller-supplied (pre-clamp) span so an attacker can't sidestep the cap by
+      // supplying a `toBlock` far beyond the chain head, relying on matchingLogs to short-circuit.
+      if (maxBlockRange > 0 && (toBlock - fromBlock) > maxBlockRange) {
         throw new GraphQLException(GraphQLError.INVALID_PARAMS);
       }
 

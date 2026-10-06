@@ -60,14 +60,15 @@ import org.hyperledger.besu.ethereum.eth.transactions.ImmutableTransactionPoolCo
 import org.hyperledger.besu.ethereum.eth.transactions.TransactionPoolConfiguration;
 import org.hyperledger.besu.ethereum.eth.transactions.pluginadapter.TransactionPoolValidatorServiceImpl;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
+import org.hyperledger.besu.ethereum.mainnet.pluginadapter.TransactionValidatorServiceImpl;
 import org.hyperledger.besu.ethereum.p2p.peers.EnodeURLImpl;
 import org.hyperledger.besu.ethereum.permissioning.pluginadapter.PermissioningServiceImpl;
 import org.hyperledger.besu.ethereum.storage.keyvalue.KeyValueStorageProvider;
 import org.hyperledger.besu.ethereum.storage.keyvalue.KeyValueStorageProviderBuilder;
 import org.hyperledger.besu.ethereum.transaction.TransactionSimulator;
 import org.hyperledger.besu.ethereum.transaction.pluginadapter.TransactionSimulationServiceImpl;
+import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.code.BonsaiCodeCacheModule;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.worldview.accumulator.preload.BonsaiCachedMerkleTrieLoaderModule;
-import org.hyperledger.besu.ethereum.trie.pathbased.common.code.PathBasedCodeCacheModule;
 import org.hyperledger.besu.ethereum.worldstate.DataStorageConfiguration;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateArchive;
 import org.hyperledger.besu.evm.internal.EvmConfiguration;
@@ -89,7 +90,6 @@ import org.hyperledger.besu.services.BesuPluginContextImpl;
 import org.hyperledger.besu.services.BesuPluginServiceRegistrar;
 import org.hyperledger.besu.services.PicoCLIOptionsImpl;
 import org.hyperledger.besu.services.StorageServiceImpl;
-import org.hyperledger.besu.services.TransactionValidatorServiceImpl;
 import org.hyperledger.besu.services.kvstore.InMemoryStoragePlugin;
 import org.hyperledger.besu.util.io.OutputStreamFactory;
 import org.hyperledger.besu.util.snappy.SnappyFactory;
@@ -562,7 +562,9 @@ public class ThreadBesuNodeRunner implements BesuNodeRunner {
       final BesuController besuController = builder.build();
       blockchainServiceImpl.init(
           besuController.getProtocolContext().getBlockchain(),
-          besuController.getProtocolSchedule());
+          besuController.getProtocolSchedule(),
+          besuController.getProtocolManager().getBlockBroadcaster(),
+          besuController.getProtocolContext().getBadBlockManager());
       transactionSimulationServiceImpl.init(
           besuController.getProtocolContext().getBlockchain(),
           besuController.getTransactionSimulator());
@@ -755,7 +757,7 @@ public class ThreadBesuNodeRunner implements BesuNodeRunner {
         MetricsSystemModule.class,
         ThreadBesuNodeRunner.BesuNodeProviderModule.class,
         BlobCacheModule.class,
-        PathBasedCodeCacheModule.class,
+        BonsaiCodeCacheModule.class,
       })
   public interface AcceptanceTestBesuComponent extends BesuComponent {
     BesuController besuController();
