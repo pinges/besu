@@ -30,6 +30,7 @@
 ### Bug fixes
 - `admin_logsRemoveCache` now returns an error when any log bloom cache segment could not be deleted, instead of reporting `Cache Removed` after a partial deletion. [#11067](https://github.com/besu-eth/besu/issues/11067)
 - `txparse --corpus-file` now closes the corpus file stream after processing instead of leaking the underlying file descriptor (it previously suppressed the `StreamResourceLeak` warning rather than releasing the resource). [#11423](https://github.com/besu-eth/besu/pull/11423)
+- `besu blocks export --include-bals` no longer truncates an existing RLP output when the BAL sidecar cannot be opened. [#11467](https://github.com/besu-eth/besu/pull/11467)
 - `eth_simulateV1` blocks after Amsterdam now carry `slotNumber` (the parent's plus one), a block access list that includes the system calls, and a header `gasUsed` that follows EIP-8037, as real blocks do. Previously `slotNumber` was missing, and the block hash differed from other clients. [#11394](https://github.com/besu-eth/besu/pull/11394)
 - `eth_simulateV1` now returns `-38014` when a call's value exceeds the sender balance. It returned `-32603`. [#11394](https://github.com/besu-eth/besu/pull/11394)
 - Publish the chain head only after sync block bodies and receipts are committed, so readers cannot observe a head absent from storage. [#10842](https://github.com/besu-eth/besu/pull/10842)
