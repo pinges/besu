@@ -46,6 +46,7 @@
 - GraphQL `sendRawTransaction` accepts typed transactions in their standard encoding (`type || rlp(payload)`), as `eth_sendRawTransaction` does. It decoded the data as a block body transaction, so an EIP-1559 transaction was rejected with `-32602 Invalid params`. [#11444](https://github.com/besu-eth/besu/pull/11444)
 - `eth_estimateGas` and `eth_createAccessList` now accept a block hash as well as a block number or tag. [#11380](https://github.com/besu-eth/besu/pull/11380)
 - A failing EIP-4788 beacon roots or EIP-2935 history storage system call no longer invalidates the block. [#11415](https://github.com/besu-eth/besu/pull/11415)
+- Publish the jump destination analysis of a contract safely to other threads [#11403](https://github.com/besu-eth/besu/pull/11403)
 
 ### Additions and Improvements
 - Update `Bouncycastle` to 1.85 to address CVEs `CVE-2026-8763` and `CVE-2026-13506`. [#11336](https://github.com/besu-eth/besu/pull/11336)
