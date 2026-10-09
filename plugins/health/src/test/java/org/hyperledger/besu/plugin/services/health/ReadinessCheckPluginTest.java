@@ -54,15 +54,12 @@ public class ReadinessCheckPluginTest {
     synchronizationService = mock(SynchronizationService.class);
     when(serviceManager.getService(SynchronizationService.class))
         .thenReturn(java.util.Optional.of(synchronizationService));
-    // Most cases here are about the peer and block-distance checks; default to a node past its
-    // initial sync phase so that gate does not mask them.
+    // Default to past the initial sync phase so it does not mask the other checks.
     when(synchronizationService.isInitialSyncPhaseDone()).thenReturn(true);
   }
 
   @Test
   void shouldFailWhileInitialSyncPhaseIsNotDone() {
-    // Covers the world state download, the trie heal and the flat database heal: a snap syncing
-    // node cannot serve state until all of them have finished.
     final ReadinessCheckPlugin plugin = new ReadinessCheckPlugin();
     plugin.register(serviceManager);
     plugin.start();
@@ -94,8 +91,7 @@ public class ReadinessCheckPluginTest {
 
   @Test
   void shouldFailWhileInitialSyncPhaseIsNotDoneAndNoSyncStatusIsReported() {
-    // Snap sync's stage 1 reports no progress at all, which leaves the block-distance check
-    // skipped. Without the initial sync gate the node would report ready on the peer check alone.
+    // Snap sync stage 1 reports no sync status, so the block-distance check is skipped.
     final ReadinessCheckPlugin plugin = new ReadinessCheckPlugin();
     plugin.register(serviceManager);
     plugin.start();

@@ -26,8 +26,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /** The readiness check plugin. */
 public class ReadinessCheckPlugin implements BesuPlugin {
+
+  private static final Logger LOG = LoggerFactory.getLogger(ReadinessCheckPlugin.class);
 
   private static final String READINESS_ENDPOINT = "/readiness";
   private static final int DEFAULT_MIN_PEERS = 1;
@@ -83,10 +88,8 @@ public class ReadinessCheckPlugin implements BesuPlugin {
   // (node treated as sync-healthy) to avoid a false-negative at startup.
   private volatile Optional<SyncStatus> cachedSyncStatus = Optional.empty();
   private long syncListenerId = -1;
-  // Pull model: the initial sync phase is queried per check rather than tracked from an event,
-  // because the completion event fires when the synchronizer starts and would be missed by a
-  // listener on a node whose synchronizer never starts (P2P disabled). Empty when the service is
-  // unavailable, in which case the check is skipped.
+  // Polled per check rather than event-driven, as the initial sync completion event is never fired
+  // if the synchronizer does not start (P2P disabled). Empty if unavailable; the check is skipped.
   private volatile Optional<SynchronizationService> synchronizationService = Optional.empty();
 
   @Override
@@ -115,6 +118,11 @@ public class ReadinessCheckPlugin implements BesuPlugin {
 
     syncListenerId = besuEvents.addSyncStatusListener(status -> cachedSyncStatus = status);
     synchronizationService = context.getService(SynchronizationService.class);
+    if (synchronizationService.isEmpty()) {
+      LOG.warn(
+          "SynchronizationService is not available; {} will not wait for the initial sync phase to complete before reporting ready",
+          READINESS_ENDPOINT);
+    }
   }
 
   private HealthCheckService.HealthCheckResult checkReadiness(
@@ -149,10 +157,8 @@ public class ReadinessCheckPlugin implements BesuPlugin {
         healthy = false;
       }
     }
-    // A snap syncing node is not ready until its chain download, world state download, trie heal
-    // and flat database heal have all finished — it cannot serve state before then. Checked
-    // separately from the block distance below, which is skipped entirely while no sync status has
-    // been reported (snap sync's stage 1 reports no progress).
+    // Checked separately, as snap sync reports no sync status in stage 1, which skips the
+    // block-distance check below.
     if (synchronizationService.filter(service -> !service.isInitialSyncPhaseDone()).isPresent()) {
       final Map<String, Object> initialSyncDetail = new LinkedHashMap<>();
       initialSyncDetail.put("status", false);

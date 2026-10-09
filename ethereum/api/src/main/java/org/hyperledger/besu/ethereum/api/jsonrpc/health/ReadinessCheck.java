@@ -80,10 +80,8 @@ public class ReadinessCheck implements HealthService.HealthCheck {
       }
     }
 
-    // A snap syncing node is not ready until its chain download, world state download, trie heal
-    // and flat database heal have all finished — it cannot serve state before then. Checked
-    // separately from the block distance below, which is skipped entirely while the sync reports
-    // no status at all (snap sync's stage 1 does not report progress).
+    // Checked separately, as snap sync reports no sync status in stage 1, which skips the
+    // block-distance check below.
     final boolean initialSyncDone = synchronizer.isInitialSyncPhaseDone();
     if (!initialSyncDone) {
       checks.put("initialSync", new JsonObject().put("status", false).put("complete", false));

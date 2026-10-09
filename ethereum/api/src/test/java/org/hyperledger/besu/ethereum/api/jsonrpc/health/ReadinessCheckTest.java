@@ -44,15 +44,12 @@ public class ReadinessCheckTest {
 
   @BeforeEach
   public void setUp() {
-    // Most cases here are about the peer and block-distance checks; default to a node past its
-    // initial sync phase so that gate does not mask them.
+    // Default to past the initial sync phase so it does not mask the other checks.
     when(synchronizer.isInitialSyncPhaseDone()).thenReturn(true);
   }
 
   @Test
   public void shouldNotBeReadyWhileInitialSyncPhaseIsNotDone() {
-    // Covers the world state download, the trie heal and the flat database heal: a snap syncing
-    // node cannot serve state until all of them have finished.
     when(p2pNetwork.isP2pEnabled()).thenReturn(true);
     when(p2pNetwork.getPeerCount()).thenReturn(5);
     when(synchronizer.isInitialSyncPhaseDone()).thenReturn(false);
@@ -68,8 +65,7 @@ public class ReadinessCheckTest {
 
   @Test
   public void shouldNotBeReadyWhileInitialSyncPhaseIsNotDoneAndNoSyncStatusIsReported() {
-    // Snap sync's stage 1 reports no progress at all, which leaves the block-distance check
-    // skipped. Without the initial sync gate the node would report ready on the peer check alone.
+    // Snap sync stage 1 reports no sync status, so the block-distance check is skipped.
     when(p2pNetwork.isP2pEnabled()).thenReturn(true);
     when(p2pNetwork.getPeerCount()).thenReturn(5);
     when(synchronizer.isInitialSyncPhaseDone()).thenReturn(false);

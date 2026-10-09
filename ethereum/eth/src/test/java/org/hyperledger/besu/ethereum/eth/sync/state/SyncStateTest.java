@@ -465,8 +465,7 @@ public class SyncStateTest {
     assertThat(syncStatus).isPresent();
     assertThat(syncStatus.get().getStartingBlock()).isEqualTo(10L);
     assertThat(syncStatus.get().getCurrentBlock()).isEqualTo(42L);
-    // The highest block comes from the same height that backs the blocks-behind signal, not from
-    // the pivot the reporting cycle was targeting.
+    // The highest block is the best chain height, not the pivot.
     assertThat(syncStatus.get().getHighestBlock()).isEqualTo(TARGET_CHAIN_HEIGHT);
   }
 
@@ -482,9 +481,6 @@ public class SyncStateTest {
 
   @Test
   public void syncStatus_highestBlockAdvancesWithoutAFurtherProgressReport() {
-    // Snap sync reports progress only while a stage 2 pipeline runs. Between cycles — notably
-    // while the chain download waits for the world state heal — nothing reports, so the highest
-    // block must be resolved per read or the node looks fully caught up.
     syncState.setSyncProgress(10L, 42L);
     syncState.onNewPayload(new BlockHeaderTestFixture().number(200L).buildHeader());
     assertThat(syncState.syncStatus().get().getHighestBlock()).isEqualTo(200L);
@@ -508,9 +504,6 @@ public class SyncStateTest {
 
   @Test
   public void syncStatus_staysEmptyWhenProgressIsReportedAfterInitialSyncPhaseIsDone() {
-    // markInitialSyncPhaseAsDone() is the only thing that clears the retained progress, so a later
-    // report must not reinstate it: that would wedge eth_syncing at "syncing" for the rest of the
-    // process lifetime.
     syncState.setSyncProgress(10L, 42L);
     syncState.markInitialSyncPhaseAsDone();
 
@@ -554,8 +547,7 @@ public class SyncStateTest {
 
   @Test
   public void syncStatusListener_stillReceivesEmptyOnClearedTargetDespiteReportedProgress() {
-    // The syncStatus() fallback must not leak into listener notifications: an empty event is how
-    // subscribers learn that the sync target is gone.
+    // An empty event is how listeners learn that the sync target is gone.
     syncState.setSyncProgress(10L, 42L);
     syncState.setSyncTarget(syncTargetPeer.getEthPeer(), blockchain.getBlockHeader(3L).get());
     syncState.clearSyncTarget();

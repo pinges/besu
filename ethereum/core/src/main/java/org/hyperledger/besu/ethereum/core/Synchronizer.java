@@ -49,11 +49,9 @@ public interface Synchronizer {
   boolean isInSync();
 
   /**
-   * Whether the initial sync phase has finished. For a snap syncing node this stays false until the
-   * chain download, the world state download, the trie heal and the flat database heal have all
-   * completed; a node with no initial sync phase reports true from start-up.
+   * Whether the initial sync phase (e.g. snap sync including the world state heal) has finished.
    *
-   * @return true once the initial sync phase is done
+   * @return true once the initial sync phase is done, or if there is none
    */
   boolean isInitialSyncPhaseDone();
 

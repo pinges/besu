@@ -334,10 +334,7 @@ public class EthStatsServiceTest {
     assertThat(reportedSyncingField()).isFalse();
   }
 
-  /**
-   * Drives a node stats report and returns the {@code syncing} field of the emitted ethstats
-   * message, so the assertion is made against the real serialized protocol message.
-   */
+  /** Sends a node stats report and returns its serialized {@code syncing} field. */
   private boolean reportedSyncingField() throws Exception {
     final EthPeers ethPeers = mock(EthPeers.class);
     when(ethPeers.streamAvailablePeers()).thenReturn(Stream.empty());

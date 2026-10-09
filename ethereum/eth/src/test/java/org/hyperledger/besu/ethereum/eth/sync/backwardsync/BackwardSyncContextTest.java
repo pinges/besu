@@ -310,7 +310,7 @@ public class BackwardSyncContextTest {
   public void isSyncingReturnsTrueWhileBackwardSyncSessionIsInFlight() {
     when(backwardSyncAlgorithmFactory.createBackwardSyncAlgorithm(context))
         .thenReturn(backwardSyncAlgorithm);
-    // A future that never completes keeps the sync session in flight for the test's duration.
+    // Never completes, so the session stays in flight.
     when(backwardSyncAlgorithm.executeBackwardsSync(null)).thenReturn(new CompletableFuture<>());
 
     context.syncBackwardsUntil(getRemoteBlockByNumber(REMOTE_HEIGHT));
@@ -340,9 +340,6 @@ public class BackwardSyncContextTest {
 
   @Test
   public void shouldStartNewSessionAfterAPreviousSessionCompletedSynchronously() throws Exception {
-    // A session can finish on the calling thread, which clears the status before it is published.
-    // Reusing that finished session would return an already-completed future from every later
-    // call, so backward sync would never run again.
     when(backwardSyncAlgorithmFactory.createBackwardSyncAlgorithm(context))
         .thenReturn(backwardSyncAlgorithm);
     when(backwardSyncAlgorithm.executeBackwardsSync(null))
@@ -433,10 +430,7 @@ public class BackwardSyncContextTest {
     final CompletableFuture<Void> future = context.syncBackwardsUntil(lowerBlock);
     final CompletableFuture<Void> secondFuture = context.syncBackwardsUntil(higherBlock);
 
-    // The stubbed algorithm completes each session on the calling thread, so the first session is
-    // already finished by the time the second call arrives and a fresh session is started for it.
-    // An in-flight session is still shared between calls, which is what coalesces real forkchoice
-    // updates.
+    // The stub completes synchronously, so the second call starts a new session.
     assertThat(future).isNotSameAs(secondFuture);
     future.orTimeout(30, TimeUnit.SECONDS);
 
@@ -470,9 +464,7 @@ public class BackwardSyncContextTest {
     // Given
     when(backwardSyncAlgorithmFactory.createBackwardSyncAlgorithm(context))
         .thenReturn(backwardSyncAlgorithm);
-    // A future that never completes keeps the session in flight, which is the case this covers:
-    // the target height of a running session is updated. A session that completed on the calling
-    // thread is never published, so there would be no status to update.
+    // Never completes, so the session stays published and its target height can be updated.
     when(backwardSyncAlgorithm.executeBackwardsSync(null)).thenReturn(new CompletableFuture<>());
 
     BlockHeader unknownBlockHeader = Mockito.mock(BlockHeader.class);
