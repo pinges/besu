@@ -35,7 +35,7 @@ import org.hyperledger.besu.ethereum.mainnet.MainnetBlockProcessor;
 import org.hyperledger.besu.ethereum.mainnet.MainnetTransactionProcessor;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSpec;
 import org.hyperledger.besu.ethereum.mainnet.block.access.list.BlockAccessList;
-import org.hyperledger.besu.ethereum.trie.pathbased.common.provider.WorldStateQueryParams;
+import org.hyperledger.besu.ethereum.worldstate.WorldStateQueryParams;
 import org.hyperledger.besu.evm.blockhash.BlockHashLookup;
 import org.hyperledger.besu.plugin.services.worldstate.MutableWorldState;
 
@@ -111,9 +111,7 @@ class BalParallelBlockProcessorIntegrationTest {
           new MainnetBlockProcessor(
               txProcessor,
               spec.getTransactionReceiptFactory(),
-              Wei.ZERO,
               BlockHeader::getCoinbase,
-              true,
               seqCtx.getProtocolSchedule(),
               SEQUENTIAL_CONFIG);
 
@@ -201,9 +199,7 @@ class BalParallelBlockProcessorIntegrationTest {
           new MainnetBlockProcessor(
               txProcessor,
               spec.getTransactionReceiptFactory(),
-              Wei.ZERO,
               BlockHeader::getCoinbase,
-              true,
               seqCtx.getProtocolSchedule(),
               SEQUENTIAL_CONFIG);
 

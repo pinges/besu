@@ -46,7 +46,7 @@ import org.hyperledger.besu.ethereum.mainnet.ProtocolSpec;
 import org.hyperledger.besu.ethereum.mainnet.block.access.list.BlockAccessList;
 import org.hyperledger.besu.ethereum.mainnet.block.access.list.BlockAccessList.BalanceChange;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.account.BonsaiAccount;
-import org.hyperledger.besu.ethereum.trie.pathbased.common.provider.WorldStateQueryParams;
+import org.hyperledger.besu.ethereum.worldstate.WorldStateQueryParams;
 import org.hyperledger.besu.metrics.noop.NoOpMetricsSystem;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
 import org.hyperledger.besu.plugin.services.storage.DataStorageFormat;
@@ -99,9 +99,7 @@ public abstract class AbstractParallelBlockProcessorIntegrationTest {
     return new MainnetBlockProcessor(
         spec.getTransactionProcessor(),
         spec.getTransactionReceiptFactory(),
-        Wei.ZERO,
         BlockHeader::getCoinbase,
-        true,
         ctx.getProtocolSchedule(),
         SEQUENTIAL_CONFIG);
   }
@@ -113,9 +111,7 @@ public abstract class AbstractParallelBlockProcessorIntegrationTest {
     return new NoBlockFallbackParallelBlockProcessor(
         spec.getTransactionProcessor(),
         spec.getTransactionReceiptFactory(),
-        Wei.ZERO,
         BlockHeader::getCoinbase,
-        true,
         ctx.getProtocolSchedule(),
         getBalConfiguration(),
         new NoOpMetricsSystem());
@@ -130,18 +126,14 @@ public abstract class AbstractParallelBlockProcessorIntegrationTest {
     public NoBlockFallbackParallelBlockProcessor(
         final MainnetTransactionProcessor transactionProcessor,
         final TransactionReceiptFactory transactionReceiptFactory,
-        final Wei blockReward,
         final MiningBeneficiaryCalculator miningBeneficiaryCalculator,
-        final boolean skipZeroBlockRewards,
         final ProtocolSchedule protocolSchedule,
         final BalConfiguration balConfiguration,
         final MetricsSystem metricsSystem) {
       super(
           transactionProcessor,
           transactionReceiptFactory,
-          blockReward,
           miningBeneficiaryCalculator,
-          skipZeroBlockRewards,
           protocolSchedule,
           balConfiguration,
           metricsSystem);

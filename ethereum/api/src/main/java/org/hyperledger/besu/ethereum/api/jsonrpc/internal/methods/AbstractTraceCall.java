@@ -29,8 +29,8 @@ import org.hyperledger.besu.ethereum.mainnet.TransactionValidationParams;
 import org.hyperledger.besu.ethereum.transaction.CallParameter;
 import org.hyperledger.besu.ethereum.transaction.PreCloseStateHandler;
 import org.hyperledger.besu.ethereum.transaction.TransactionSimulator;
-import org.hyperledger.besu.ethereum.vm.DebugOperationTracer;
 import org.hyperledger.besu.evm.tracing.OpCodeTracerConfigBuilder;
+import org.hyperledger.besu.evm.tracing.OperationTracer;
 
 import java.util.Optional;
 
@@ -40,31 +40,21 @@ import org.slf4j.LoggerFactory;
 public abstract class AbstractTraceCall extends AbstractTraceByBlock {
   private static final Logger LOG = LoggerFactory.getLogger(AbstractTraceCall.class);
 
-  /**
-   * A flag to indicate if call operations should trace just the operation cost (false, Geth style,
-   * debug_ series RPCs) or the operation cost and all gas granted to the child call (true, Parity
-   * style, trace_ series RPCs)
-   */
-  private final boolean recordChildCallGas;
-
   private final long serverStepLimit;
 
   protected AbstractTraceCall(
       final BlockchainQueries blockchainQueries,
       final ProtocolSchedule protocolSchedule,
-      final TransactionSimulator transactionSimulator,
-      final boolean recordChildCallGas) {
-    this(blockchainQueries, protocolSchedule, transactionSimulator, recordChildCallGas, null);
+      final TransactionSimulator transactionSimulator) {
+    this(blockchainQueries, protocolSchedule, transactionSimulator, (ApiConfiguration) null);
   }
 
   protected AbstractTraceCall(
       final BlockchainQueries blockchainQueries,
       final ProtocolSchedule protocolSchedule,
       final TransactionSimulator transactionSimulator,
-      final boolean recordChildCallGas,
       final ApiConfiguration apiConfiguration) {
     super(blockchainQueries, protocolSchedule, transactionSimulator);
-    this.recordChildCallGas = recordChildCallGas;
     this.serverStepLimit =
         apiConfiguration != null ? apiConfiguration.getDebugTraceStepLimit() : 0L;
   }
@@ -72,17 +62,6 @@ public abstract class AbstractTraceCall extends AbstractTraceByBlock {
   @Override
   protected Object resultByBlockNumber(
       final JsonRpcRequestContext requestContext, final long blockNumber) {
-    final CallParameter callParams = CallParameterUtil.validateAndGetCallParams(requestContext);
-    final TraceOptions traceOptions = getTraceOptions(requestContext);
-    final String blockNumberString = String.valueOf(blockNumber);
-    LOG.atTrace()
-        .setMessage("Received RPC rpcName={} callParams={} block={} traceTypes={}")
-        .addArgument(this::getName)
-        .addArgument(callParams)
-        .addArgument(blockNumberString)
-        .addArgument(traceOptions)
-        .log();
-
     final Optional<BlockHeader> maybeBlockHeader =
         blockchainQueriesSupplier.get().getBlockHeaderByNumber(blockNumber);
 
@@ -90,21 +69,40 @@ public abstract class AbstractTraceCall extends AbstractTraceByBlock {
       return new JsonRpcErrorResponse(requestContext.getRequest().getId(), BLOCK_NOT_FOUND);
     }
 
-    final ProtocolSpec protocolSpec = protocolSchedule.getByBlockHeader(maybeBlockHeader.get());
+    return resultByBlockHeader(requestContext, maybeBlockHeader.get());
+  }
+
+  protected Object resultByBlockHeader(
+      final JsonRpcRequestContext requestContext, final BlockHeader blockHeader) {
+    final CallParameter callParams = getCallParams(requestContext);
+    final TraceOptions traceOptions = getTraceOptions(requestContext);
+    LOG.atTrace()
+        .setMessage("Received RPC rpcName={} callParams={} block={} traceTypes={}")
+        .addArgument(this::getName)
+        .addArgument(callParams)
+        .addArgument(blockHeader::getNumber)
+        .addArgument(traceOptions)
+        .log();
+
+    final ProtocolSpec protocolSpec = protocolSchedule.getByBlockHeader(blockHeader);
 
     final TraceOptions effectiveTraceOptions = applyServerStepLimit(traceOptions);
-    final DebugOperationTracer tracer =
-        new DebugOperationTracer(effectiveTraceOptions.opCodeTracerConfig(), recordChildCallGas);
+    final TraceExecution execution =
+        createTraceExecution(requestContext, effectiveTraceOptions, protocolSpec);
     return transactionSimulator
         .process(
             callParams,
             Optional.ofNullable(effectiveTraceOptions.stateOverrides()),
-            buildTransactionValidationParams(maybeBlockHeader.get(), callParams),
-            tracer,
-            getSimulatorResultHandler(requestContext, tracer, protocolSpec),
-            maybeBlockHeader.get())
+            buildTransactionValidationParams(blockHeader, callParams),
+            execution.tracer(),
+            execution.resultHandler(),
+            blockHeader)
         .orElseGet(
             () -> new JsonRpcErrorResponse(requestContext.getRequest().getId(), INTERNAL_ERROR));
+  }
+
+  protected CallParameter getCallParams(final JsonRpcRequestContext requestContext) {
+    return CallParameterUtil.validateAndGetCallParams(requestContext);
   }
 
   /**
@@ -137,13 +135,32 @@ public abstract class AbstractTraceCall extends AbstractTraceByBlock {
 
   protected TransactionValidationParams buildTransactionValidationParams(
       final BlockHeader header, final CallParameter callParams) {
-    return buildTransactionValidationParams();
+    return CallParameterUtil.getTransactionValidationParams(header, callParams);
   }
 
   protected abstract TraceOptions getTraceOptions(final JsonRpcRequestContext requestContext);
 
-  protected abstract PreCloseStateHandler<Object> getSimulatorResultHandler(
+  /**
+   * Creates the {@link TraceExecution} pairing the {@link OperationTracer} with its corresponding
+   * {@link PreCloseStateHandler} result processor.
+   *
+   * @param requestContext the JSON-RPC request context
+   * @param traceOptions the trace options
+   * @param protocolSpec the protocol spec
+   * @return the trace execution pair
+   */
+  protected abstract TraceExecution createTraceExecution(
       final JsonRpcRequestContext requestContext,
-      final DebugOperationTracer tracer,
+      final TraceOptions traceOptions,
       final ProtocolSpec protocolSpec);
+
+  /**
+   * Pairs the {@link OperationTracer} for transaction simulation with its corresponding {@link
+   * PreCloseStateHandler} result processor.
+   *
+   * @param tracer the tracer driving transaction execution
+   * @param resultHandler the simulation result handler producing the RPC response
+   */
+  protected record TraceExecution(
+      OperationTracer tracer, PreCloseStateHandler<Object> resultHandler) {}
 }

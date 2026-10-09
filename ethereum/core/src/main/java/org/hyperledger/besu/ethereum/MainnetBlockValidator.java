@@ -20,6 +20,7 @@ import org.hyperledger.besu.ethereum.chain.MutableBlockchain;
 import org.hyperledger.besu.ethereum.core.Block;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.core.Request;
+import org.hyperledger.besu.ethereum.core.Transaction;
 import org.hyperledger.besu.ethereum.core.TransactionReceipt;
 import org.hyperledger.besu.ethereum.mainnet.BlockAccessListValidator;
 import org.hyperledger.besu.ethereum.mainnet.BlockBodyValidator;
@@ -29,7 +30,7 @@ import org.hyperledger.besu.ethereum.mainnet.BodyValidationMode;
 import org.hyperledger.besu.ethereum.mainnet.HeaderValidationMode;
 import org.hyperledger.besu.ethereum.mainnet.block.access.list.BlockAccessList;
 import org.hyperledger.besu.ethereum.trie.MerkleTrieException;
-import org.hyperledger.besu.ethereum.trie.pathbased.common.provider.WorldStateQueryParams;
+import org.hyperledger.besu.ethereum.worldstate.WorldStateQueryParams;
 import org.hyperledger.besu.plugin.services.exception.StorageException;
 import org.hyperledger.besu.plugin.services.worldstate.MutableWorldState;
 
@@ -197,6 +198,14 @@ public class MainnetBlockValidator implements BlockValidator {
         return retval;
       }
 
+      // A transaction whose gas limit does not fit an otherwise empty block can never fit, whatever
+      // ran before it, so no execution can make the block valid and the gas limit is the reason.
+      if (transactionsExceedBlockGasLimit(block)) {
+        final var result = BlockProcessingResult.INSUFFICIENT_BLOCK_GAS;
+        handleFailedBlockProcessing(block, blockAccessList, result, shouldRecordBadBlock, context);
+        return result;
+      }
+
       if (!blockAccessListValidator.validate(
           blockAccessList, block.getHeader(), block.getBody().getTransactions().size())) {
         var result =
@@ -238,6 +247,10 @@ public class MainnetBlockValidator implements BlockValidator {
               block, blockAccessList, result, shouldRecordBadBlock, context);
           return result;
         }
+
+        // a block that validates cannot be bad, whatever an earlier attempt recorded, and its
+        // descendants must not be rejected on its account
+        context.getBadBlockManager().removeBadBlock(block.getHash());
 
         return new BlockProcessingResult(
             Optional.of(
@@ -287,20 +300,20 @@ public class MainnetBlockValidator implements BlockValidator {
       final boolean shouldRecordBadBlock,
       final ProtocolContext context) {
     if (result.causedBy().isPresent()) {
-      // Block processing failed exceptionally, we cannot assume the block was intrinsically invalid
       LOG.info(
           "Failed to process block {}: {}, caused by {}",
           failedBlock.toLogString(),
           result.errorMessage,
           result.causedBy().get());
       LOG.debug("with stack", result.causedBy().get());
+    } else if (result.errorMessage.isPresent()) {
+      LOG.info("Invalid block {}: {}", failedBlock.toLogString(), result.errorMessage);
     } else {
-      if (result.errorMessage.isPresent()) {
-        LOG.info("Invalid block {}: {}", failedBlock.toLogString(), result.errorMessage);
-      } else {
-        LOG.info("Invalid block {}", failedBlock.toLogString());
-      }
+      LOG.info("Invalid block {}", failedBlock.toLogString());
+    }
 
+    // a failure of this node says nothing about the block
+    if (!result.isLocalFailure()) {
       if (shouldRecordBadBlock) {
         // Result.errorMessage should not be empty on failure, but add a default to be safe
         String description = result.errorMessage.orElse("Unknown cause");
@@ -316,6 +329,16 @@ public class MainnetBlockValidator implements BlockValidator {
         LOG.debug("Invalid block {} not added to badBlockManager ", failedBlock.toLogString());
       }
     }
+  }
+
+  private static boolean transactionsExceedBlockGasLimit(final Block block) {
+    final long blockGasLimit = block.getHeader().getGasLimit();
+    for (final Transaction transaction : block.getBody().getTransactions()) {
+      if (transaction.getGasLimit() > blockGasLimit) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
