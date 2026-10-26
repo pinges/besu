@@ -19,8 +19,9 @@ import static org.hyperledger.besu.ethereum.trie.RangeManager.MAX_RANGE;
 import static org.hyperledger.besu.ethereum.trie.RangeManager.MIN_RANGE;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -31,22 +32,33 @@ import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.ethereum.chain.Blockchain;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.core.BlockHeaderTestFixture;
+import org.hyperledger.besu.ethereum.core.Difficulty;
 import org.hyperledger.besu.ethereum.core.InMemoryKeyValueStorageProvider;
 import org.hyperledger.besu.ethereum.core.TrieGenerator;
+import org.hyperledger.besu.ethereum.eth.manager.ChainState;
 import org.hyperledger.besu.ethereum.eth.manager.EthContext;
-import org.hyperledger.besu.ethereum.eth.manager.exceptions.MaxRetriesReachedException;
-import org.hyperledger.besu.ethereum.eth.manager.snap.RetryingGetStorageRangeFromPeerTask;
+import org.hyperledger.besu.ethereum.eth.manager.EthPeer;
+import org.hyperledger.besu.ethereum.eth.manager.EthPeerImmutableAttributes;
+import org.hyperledger.besu.ethereum.eth.manager.EthPeers;
+import org.hyperledger.besu.ethereum.eth.manager.PeerReputation;
+import org.hyperledger.besu.ethereum.eth.manager.PendingPeerRequest;
+import org.hyperledger.besu.ethereum.eth.manager.RequestManager.ResponseCallback;
+import org.hyperledger.besu.ethereum.eth.manager.RequestManager.ResponseStream;
+import org.hyperledger.besu.ethereum.eth.messages.snap.StorageRangeMessage;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.context.SnapSyncStatePersistenceManager;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.AccountRangeDataRequest;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.SnapDataRequest;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.SnapRequestContext;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.StorageRangeDataRequest;
+import org.hyperledger.besu.ethereum.p2p.rlpx.connections.PeerConnection;
+import org.hyperledger.besu.ethereum.p2p.rlpx.wire.MessageData;
 import org.hyperledger.besu.ethereum.proof.WorldStateProofProvider;
 import org.hyperledger.besu.ethereum.rlp.RLP;
+import org.hyperledger.besu.ethereum.trie.CompactEncoding;
 import org.hyperledger.besu.ethereum.trie.MerkleTrie;
 import org.hyperledger.besu.ethereum.trie.RangeStorageEntriesCollector;
 import org.hyperledger.besu.ethereum.trie.TrieIterator;
-import org.hyperledger.besu.ethereum.trie.common.PmtStateTrieAccountValue;
+import org.hyperledger.besu.ethereum.trie.common.PatriciaTrieAccountValue;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.storage.BonsaiWorldStateKeyValueStorage;
 import org.hyperledger.besu.ethereum.trie.pathbased.bonsai.storage.trienode.TrieNodeKey;
 import org.hyperledger.besu.ethereum.trie.patricia.StoredMerklePatriciaTrie;
@@ -57,8 +69,10 @@ import org.hyperledger.besu.metrics.SyncDurationMetrics;
 import org.hyperledger.besu.metrics.noop.NoOpMetricsSystem;
 import org.hyperledger.besu.services.tasks.InMemoryTasksPriorityQueues;
 import org.hyperledger.besu.services.tasks.Task;
+import org.hyperledger.besu.testutil.DeterministicEthScheduler;
 import org.hyperledger.besu.testutil.TestClock;
 
+import java.math.BigInteger;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -66,15 +80,19 @@ import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import kotlin.collections.ArrayDeque;
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedStatic;
 
 /**
  * A pivot change makes the storage root of an account with frequently changing storage out of date.
@@ -111,7 +129,7 @@ class StorageRootRefreshTest {
     stateRoot = Hash.wrap(accountStateTrie.getRootHash());
     storageRoot =
         Bytes32.wrap(
-            PmtStateTrieAccountValue.readFrom(
+            PatriciaTrieAccountValue.readFrom(
                     RLP.input(accountStateTrie.get(accountHash.getBytes()).orElseThrow()))
                 .getStorageRoot()
                 .getBytes());
@@ -400,7 +418,24 @@ class StorageRootRefreshTest {
       assertThat(downloadState.isStorageRootRefreshPending(accountHash)).isFalse();
       assertThat(downloadState.getRefreshedStorageRoot(accountHash))
           .contains(new SnapRequestContext.RefreshedStorageRoot(stateRoot, storageRoot));
-      // a later failure can queue a new refresh
+    }
+
+    @Test
+    void anAccountIsRefreshedAgainOnlyAtANewPivot() {
+      downloadState.requestStorageRootRefresh(accountHash);
+      dequeueAccountRequest().markCompleted();
+      downloadState.completeStorageRootRefresh(accountHash, stateRoot, storageRoot);
+
+      // e.g. after a late response for an older pivot: requests retried at this pivot use the
+      // refreshed storage root
+      downloadState.requestStorageRootRefresh(accountHash);
+      assertThat(downloadState.isStorageRootRefreshPending(accountHash)).isFalse();
+      assertThat(downloadState.pendingStorageRootRefreshRequests.size()).isZero();
+
+      // at a new pivot the storage root may have changed again
+      when(snapSyncState.getPivotBlockHeader())
+          .thenReturn(
+              Optional.of(new BlockHeaderTestFixture().stateRoot(NEWER_STATE_ROOT).buildHeader()));
       downloadState.requestStorageRootRefresh(accountHash);
       assertThat(downloadState.isStorageRootRefreshPending(accountHash)).isTrue();
     }
@@ -428,8 +463,8 @@ class StorageRootRefreshTest {
 
       assertThat(task.getData()).isSameAs(other);
       assertThat(downloadState.pendingLargeStorageRequests.size()).isZero();
-      // the parked request stays outstanding, so the queue is not seen as completed
-      assertThat(downloadState.pendingLargeStorageRequests.outstandingTaskCount()).isEqualTo(2);
+      // with the handed out request done, the parked one keeps the queue from being completed
+      task.markCompleted();
       assertThat(downloadState.pendingLargeStorageRequests.allTasksCompleted()).isFalse();
       assertThat(downloadState.getRequestsSinceLastProgress()).isZero();
     }
@@ -443,10 +478,12 @@ class StorageRootRefreshTest {
       downloadState.requestStorageRootRefresh(accountHash);
 
       final CompletableFuture<Task<SnapDataRequest>> dequeued =
-          CompletableFuture.supplyAsync(() -> downloadState.dequeueStorageRequestBlocking());
+          dequeueOnWaitingThread(downloadState::dequeueStorageRequestBlocking);
 
-      assertThat(dequeued).failsWithin(Duration.ofMillis(200));
-      assertThat(downloadState.pendingStorageRequests.outstandingTaskCount()).isEqualTo(1);
+      assertThat(dequeued).isNotDone();
+      // the parked request left the queue but stays outstanding
+      assertThat(downloadState.pendingStorageRequests.size()).isZero();
+      assertThat(downloadState.pendingStorageRequests.allTasksCompleted()).isFalse();
       downloadState.completeStorageRootRefresh(accountHash, stateRoot, storageRoot);
       assertThat(dequeued)
           .succeedsWithin(Duration.ofSeconds(5))
@@ -462,8 +499,8 @@ class StorageRootRefreshTest {
 
       // only parked requests left: the dequeue waits instead of handing them out
       final CompletableFuture<Task<SnapDataRequest>> dequeued =
-          CompletableFuture.supplyAsync(() -> downloadState.dequeueLargeStorageRequestBlocking());
-      assertThat(dequeued).failsWithin(Duration.ofMillis(200));
+          dequeueOnWaitingThread(downloadState::dequeueLargeStorageRequestBlocking);
+      assertThat(dequeued).isNotDone();
 
       downloadState.completeStorageRootRefresh(accountHash, stateRoot, storageRoot);
 
@@ -474,7 +511,8 @@ class StorageRootRefreshTest {
       // a second completion has nothing left to put back
       downloadState.completeStorageRootRefresh(accountHash, stateRoot, storageRoot);
       assertThat(downloadState.pendingLargeStorageRequests.size()).isZero();
-      assertThat(downloadState.pendingLargeStorageRequests.outstandingTaskCount()).isEqualTo(1);
+      dequeued.join().markCompleted();
+      assertThat(downloadState.pendingLargeStorageRequests.allTasksCompleted()).isTrue();
       assertThat(downloadState.getRequestsSinceLastProgress()).isZero();
     }
 
@@ -489,11 +527,61 @@ class StorageRootRefreshTest {
 
       assertThat(downloadState.isStorageRootRefreshPending(accountHash)).isFalse();
       assertThat(downloadState.getRefreshedStorageRoot(accountHash)).isEmpty();
-      assertThat(downloadState.pendingLargeStorageRequests.outstandingTaskCount()).isZero();
+      assertThat(downloadState.pendingLargeStorageRequests.allTasksCompleted()).isTrue();
       assertThat(downloadState.pendingStorageRootRefreshRequests.size()).isZero();
       // a late refresh request is ignored and not left pending without a refresh behind it
       downloadState.requestStorageRootRefresh(accountHash);
       assertThat(downloadState.isStorageRootRefreshPending(accountHash)).isFalse();
+    }
+
+    @Test
+    void requestsParkedForARefreshThatFindsNoStorageAreCompletedWithoutBeingSent() {
+      final EthContext ethContext = mock(EthContext.class);
+      final SnapSyncConfiguration config = SnapSyncConfiguration.getDefault();
+      final RequestDataStep requestDataStep =
+          new RequestDataStep(
+              ethContext,
+              worldStateStorageCoordinator,
+              snapSyncState,
+              downloadState,
+              config,
+              new NoOpMetricsSystem());
+      final PersistDataStep persistDataStep =
+          new PersistDataStep(snapSyncState, worldStateStorageCoordinator, downloadState, config);
+      final CompleteTaskStep completeTaskStep =
+          new CompleteTaskStep(snapSyncState, new NoOpMetricsSystem());
+      // made at an older pivot, when the account still had storage
+      final StorageRangeDataRequest parked = smallStorageRequest(accountHash);
+      final StorageRangeDataRequest other = smallStorageRequest(Hash.wrap(Bytes32.ZERO));
+      downloadState.enqueueRequest(parked);
+      downloadState.enqueueRequest(other);
+      downloadState.requestStorageRootRefresh(accountHash);
+      final Task<SnapDataRequest> otherTask = dequeueStorageRequest(); // parks the first request
+      assertThat(otherTask.getData()).isSameAs(other);
+
+      // the refresh is taken and finds that the account has no storage at the pivot
+      dequeueAccountRequest().markCompleted();
+      downloadState.completeStorageRootRefresh(
+          accountHash, stateRoot, MerkleTrie.EMPTY_TRIE_NODE_HASH);
+
+      final Task<SnapDataRequest> task = dequeueStorageRequest();
+      assertThat(task.getData()).isSameAs(parked);
+      final List<Task<SnapDataRequest>> tasks = List.of(task);
+      assertThat(requestDataStep.requestStorage(tasks).join()).isSameAs(tasks);
+      persistDataStep.persist(tasks);
+      completeTaskStep.markAsCompleteOrFailed(downloadState, task);
+
+      assertThat(parked.isResponseReceived()).isTrue();
+      verifyNoInteractions(ethContext);
+      // nothing is left to download for the account, but what was saved of its storage needs
+      // healing
+      assertThat(downloadState.pendingStorageRequests.size()).isZero();
+      assertThat(downloadState.pendingLargeStorageRequests.size()).isZero();
+      assertThat(downloadState.getAccountsHealingList())
+          .contains(CompactEncoding.bytesToPath(accountHash.getBytes()));
+      // the other request, still outstanding, is the only one keeping the queue from completing
+      otherTask.markCompleted();
+      assertThat(downloadState.pendingStorageRequests.allTasksCompleted()).isTrue();
     }
 
     private StorageRangeDataRequest largeStorageRequest(final Hash account) {
@@ -505,14 +593,37 @@ class StorageRootRefreshTest {
           MAX_RANGE);
     }
 
+    private StorageRangeDataRequest smallStorageRequest(final Hash account) {
+      return SnapDataRequest.createStorageRangeDataRequest(
+          OLDER_STATE_ROOT, Bytes32.wrap(account.getBytes()), storageRoot, MIN_RANGE, MAX_RANGE);
+    }
+
     private Task<SnapDataRequest> dequeueLargeStorageRequest() {
       return assertTimeoutPreemptively(
           Duration.ofSeconds(5), () -> downloadState.dequeueLargeStorageRequestBlocking());
     }
 
+    private Task<SnapDataRequest> dequeueStorageRequest() {
+      return assertTimeoutPreemptively(
+          Duration.ofSeconds(5), () -> downloadState.dequeueStorageRequestBlocking());
+    }
+
     private Task<SnapDataRequest> dequeueAccountRequest() {
       return assertTimeoutPreemptively(
           Duration.ofSeconds(5), () -> downloadState.dequeueAccountRequestBlocking());
+    }
+
+    /** Starts the dequeue on its own thread and returns once the thread waits for a request. */
+    private CompletableFuture<Task<SnapDataRequest>> dequeueOnWaitingThread(
+        final Supplier<Task<SnapDataRequest>> dequeue) {
+      final CompletableFuture<Task<SnapDataRequest>> dequeued = new CompletableFuture<>();
+      final Thread thread = new Thread(() -> dequeued.complete(dequeue.get()));
+      thread.setDaemon(true);
+      thread.start();
+      Awaitility.await()
+          .atMost(5, TimeUnit.SECONDS)
+          .until(() -> thread.getState() == Thread.State.WAITING || dequeued.isDone());
+      return dequeued;
     }
   }
 
@@ -555,9 +666,32 @@ class StorageRootRefreshTest {
       verifyNoInteractions(ethContext);
     }
 
+    // The tests below run the real retrying peer task: only the peer's answer is canned.
     @Test
-    void emptyResponsesForAStorageRootFromAnOlderPivotRequestARefresh() {
-      // the refresh found no storage at another pivot, so the request is still sent
+    void aNoStorageAnswerForAStorageRootFromAnOlderPivotRequestsARefresh() {
+      when(context.getRefreshedStorageRoot(any())).thenReturn(Optional.empty());
+      final StorageRangeDataRequest request = fullRangeRequest(OLDER_STATE_ROOT);
+
+      sendWithPeerAnswering(noStorageAnswer(), request);
+
+      assertThat(request.isResponseReceived()).isFalse();
+      verify(context).requestStorageRootRefresh(accountHash);
+    }
+
+    @Test
+    void aNoStorageAnswerForAStorageRootValidAtThePivotDoesNotRequestARefresh() {
+      when(context.getRefreshedStorageRoot(any())).thenReturn(Optional.empty());
+      final StorageRangeDataRequest request = fullRangeRequest(stateRoot);
+
+      sendWithPeerAnswering(noStorageAnswer(), request);
+
+      assertThat(request.isResponseReceived()).isFalse();
+      verify(context, never()).requestStorageRootRefresh(any());
+    }
+
+    @Test
+    void aNoStorageAnswerAfterARefreshForAnotherPivotRequestsARefresh() {
+      // a refresh proves nothing for a pivot it was not made at
       when(context.getRefreshedStorageRoot(accountHash))
           .thenReturn(
               Optional.of(
@@ -565,41 +699,61 @@ class StorageRootRefreshTest {
                       NEWER_STATE_ROOT, MerkleTrie.EMPTY_TRIE_NODE_HASH)));
       final StorageRangeDataRequest request = fullRangeRequest(OLDER_STATE_ROOT);
 
-      sendWithPeersAnsweringNothing(request);
+      sendWithPeerAnswering(noStorageAnswer(), request);
 
       assertThat(request.isResponseReceived()).isFalse();
       verify(context).requestStorageRootRefresh(accountHash);
     }
 
-    @Test
-    void emptyResponsesForAStorageRootValidAtThePivotDoNotRequestARefresh() {
-      when(context.getRefreshedStorageRoot(any())).thenReturn(Optional.empty());
-      final StorageRangeDataRequest request = fullRangeRequest(stateRoot);
-
-      sendWithPeersAnsweringNothing(request);
-
-      assertThat(request.isResponseReceived()).isFalse();
-      verify(context, never()).requestStorageRootRefresh(any());
+    // what a peer answers to a full range request for an account without storage: no slots and no
+    // proofs
+    private MessageData noStorageAnswer() {
+      return StorageRangeMessage.create(new ArrayDeque<>(), List.of())
+          .wrapMessageData(BigInteger.ONE);
     }
 
-    private void sendWithPeersAnsweringNothing(final StorageRangeDataRequest request) {
-      final RetryingGetStorageRangeFromPeerTask peerTask =
-          mock(RetryingGetStorageRangeFromPeerTask.class);
-      // the retrying task gives up with this after empty responses from every peer
-      when(peerTask.run())
-          .thenReturn(CompletableFuture.failedFuture(new MaxRetriesReachedException()));
-      try (MockedStatic<RetryingGetStorageRangeFromPeerTask> retryingTask =
-          mockStatic(RetryingGetStorageRangeFromPeerTask.class)) {
-        retryingTask
-            .when(
-                () ->
-                    RetryingGetStorageRangeFromPeerTask.forStorageRange(
-                        any(), any(), any(), any(), any(), any()))
-            .thenReturn(peerTask);
-        final List<Task<SnapDataRequest>> tasks = List.of(new StubTask(request));
+    // Sends the request through the real retrying peer task. Only the peer is faked: it is the one
+    // peer available and it answers the request with the given message.
+    private void sendWithPeerAnswering(
+        final MessageData answer, final StorageRangeDataRequest request) {
+      final EthPeers ethPeers = mock(EthPeers.class);
+      final EthPeer peer = mock(EthPeer.class);
+      final ChainState chainState = mock(ChainState.class);
+      when(chainState.getEstimatedTotalDifficulty()).thenReturn(Difficulty.ZERO);
+      when(peer.chainState()).thenReturn(chainState);
+      when(peer.getReputation()).thenReturn(mock(PeerReputation.class));
+      when(peer.getConnection()).thenReturn(mock(PeerConnection.class));
+      when(peer.isServingSnap()).thenReturn(true);
+      when(ethPeers.streamBestPeers())
+          .thenAnswer(invocation -> Stream.of(EthPeerImmutableAttributes.from(peer)));
 
-        assertThat(requestDataStep.requestStorage(tasks).join()).isSameAs(tasks);
-      }
+      final ResponseStream responseStream = mock(ResponseStream.class);
+      when(responseStream.getPeer()).thenReturn(peer);
+      when(responseStream.then(any()))
+          .thenAnswer(
+              invocation -> {
+                final ResponseCallback callback = invocation.getArgument(0);
+                callback.exec(false, answer, peer);
+                return responseStream;
+              });
+      final PendingPeerRequest pendingRequest = mock(PendingPeerRequest.class);
+      when(pendingRequest.abort()).thenReturn(Optional.of(responseStream));
+      doAnswer(
+              invocation -> {
+                final Consumer<ResponseStream> onSent = invocation.getArgument(0);
+                onSent.accept(responseStream);
+                return null;
+              })
+          .when(pendingRequest)
+          .then(any(), any());
+      when(ethPeers.executePeerRequest(any(), anyLong(), any())).thenReturn(pendingRequest);
+
+      when(ethContext.getEthPeers()).thenReturn(ethPeers);
+      when(ethContext.getScheduler()).thenReturn(new DeterministicEthScheduler());
+
+      final List<Task<SnapDataRequest>> tasks = List.of(new StubTask(request));
+
+      assertThat(requestDataStep.requestStorage(tasks).join()).isSameAs(tasks);
     }
 
     private StorageRangeDataRequest fullRangeRequest(final Hash knownAtStateRoot) {

@@ -17,7 +17,6 @@ package org.hyperledger.besu.ethereum.eth.sync.snapsync;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.eth.manager.EthContext;
-import org.hyperledger.besu.ethereum.eth.manager.exceptions.MaxRetriesReachedException;
 import org.hyperledger.besu.ethereum.eth.manager.snap.RetryingGetAccountRangeFromPeerTask;
 import org.hyperledger.besu.ethereum.eth.manager.snap.RetryingGetBytecodeFromPeerTask;
 import org.hyperledger.besu.ethereum.eth.manager.snap.RetryingGetStorageRangeFromPeerTask;
@@ -40,7 +39,6 @@ import org.hyperledger.besu.ethereum.worldstate.FlatDbMode;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateStorageCoordinator;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
 import org.hyperledger.besu.services.tasks.Task;
-import org.hyperledger.besu.util.ExceptionUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -193,6 +191,9 @@ public class RequestDataStep {
                         slots.get(i),
                         i < slots.size() - 1 ? new ArrayDeque<>() : response.proofs());
                   }
+                  if (response.slots().isEmpty() && response.proofs().isEmpty()) {
+                    refreshOutdatedStorageRoots(requestsToSend, stateRoot);
+                  }
                 } catch (final Exception e) {
                   LOG.error("Error while processing storage range response", e);
                 }
@@ -202,16 +203,6 @@ public class RequestDataStep {
                     .setMessage("Error handling storage range request task: {}")
                     .addArgument(error)
                     .log();
-                if (ExceptionUtils.rootCause(error) instanceof MaxRetriesReachedException) {
-                  // Peers kept sending nothing, as they do for an account without storage. If
-                  // the storage root is from an older pivot, the account's storage may have been
-                  // cleared or the account removed: refresh its storage root.
-                  requestsToSend.stream()
-                      .filter(request -> !request.isStorageRootValidAt(stateRoot))
-                      .forEach(
-                          request ->
-                              downloadState.requestStorageRootRefresh(request.getAccountHash()));
-                }
               }
               return requestTasks;
             });
@@ -225,6 +216,22 @@ public class RequestDataStep {
                 refreshed.stateRoot().equals(stateRoot)
                     && refreshed.storageRoot().equals(MerkleTrie.EMPTY_TRIE_NODE_HASH))
         .isPresent();
+  }
+
+  /**
+   * A peer that sends neither slots nor proofs has no storage to give for the requested accounts,
+   * as is the case for an account whose storage was cleared since the pivot its storage root is
+   * from. A peer that cannot serve the request answers the same way, so the storage roots that may
+   * be outdated are refreshed to tell the two apart. A root already proven at this pivot cannot be
+   * outdated and is not refreshed.
+   */
+  private void refreshOutdatedStorageRoots(
+      final List<StorageRangeDataRequest> requests, final Hash stateRoot) {
+    for (final StorageRangeDataRequest request : requests) {
+      if (!request.isStorageRootValidAt(stateRoot)) {
+        downloadState.requestStorageRootRefresh(request.getAccountHash());
+      }
+    }
   }
 
   public CompletableFuture<List<Task<SnapDataRequest>>> requestCode(

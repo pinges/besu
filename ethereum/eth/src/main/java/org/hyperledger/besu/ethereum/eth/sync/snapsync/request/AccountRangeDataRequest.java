@@ -90,7 +90,8 @@ public class AccountRangeDataRequest extends SnapDataRequest {
 
   /**
    * Creates a request that fetches a single account only to learn its current storage root, after a
-   * storage range proof for the account failed because the pivot moved.
+   * storage range response suggested that the root is out of date: its proof failed, or the peer
+   * sent no storage for the account.
    *
    * @param rootHash the state root to fetch the account for
    * @param accountHash the account

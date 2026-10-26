@@ -55,16 +55,15 @@ public interface SnapRequestContext {
    * @param accountHash the account
    * @return the refreshed storage root, or empty if the account was never refreshed
    */
-  default Optional<RefreshedStorageRoot> getRefreshedStorageRoot(final Hash accountHash) {
-    return Optional.empty();
-  }
+  Optional<RefreshedStorageRoot> getRefreshedStorageRoot(Hash accountHash);
 
   /**
-   * Requests a refresh of the account's storage root, unless one is already pending.
+   * Requests a refresh of the account's storage root, unless one is already pending or was made at
+   * the current pivot.
    *
-   * @param accountHash the account whose storage root is out of date
+   * @param accountHash the account whose storage root may be out of date
    */
-  default void requestStorageRootRefresh(final Hash accountHash) {}
+  void requestStorageRootRefresh(Hash accountHash);
 
   /**
    * Records the result of a storage root refresh and clears the pending marker.
@@ -73,6 +72,5 @@ public interface SnapRequestContext {
    * @param stateRoot the state root the account was fetched for
    * @param storageRoot the account's storage root at that state root
    */
-  default void completeStorageRootRefresh(
-      final Hash accountHash, final Hash stateRoot, final Bytes32 storageRoot) {}
+  void completeStorageRootRefresh(Hash accountHash, Hash stateRoot, Bytes32 storageRoot);
 }

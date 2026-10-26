@@ -382,11 +382,15 @@ public class SnapWorldDownloadState extends WorldDownloadState<SnapDataRequest>
     if (internalFuture.isDone() || storageRootRefreshesPending.contains(accountHash)) {
       return;
     }
+    final Hash stateRoot = snapSyncState.getPivotBlockHeader().orElseThrow().getStateRoot();
+    final RefreshedStorageRoot refreshed = refreshedStorageRoots.get(accountHash);
+    if (refreshed != null && refreshed.stateRoot().equals(stateRoot)) {
+      // already refreshed at this pivot: requests retried at this pivot use that storage root
+      return;
+    }
     // built before the account is marked pending, so that a failure cannot leave it marked
     // without a refresh behind it
-    final SnapDataRequest refresh =
-        createStorageRootRefreshRequest(
-            snapSyncState.getPivotBlockHeader().orElseThrow().getStateRoot(), accountHash);
+    final SnapDataRequest refresh = createStorageRootRefreshRequest(stateRoot, accountHash);
     enqueueRequest(refresh);
     storageRootRefreshesPending.add(accountHash);
   }
