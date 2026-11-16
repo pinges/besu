@@ -40,6 +40,7 @@
 - Add `trace_replayTransaction` to the `TRACE` API. It replays one mined transaction on top of the transactions before it in its block and returns the same result as `trace_replayBlockTransactions` for that transaction. [#11406](https://github.com/besu-eth/besu/pull/11406)
 - Update the Docker base images (Ubuntu 24.04, Eclipse Temurin 25.0.5), resolving CVE-2026-85091, and disable apt download retries during the image build to mitigate CVE-2026-109518 until the base ships a fixed apt. [#11874](https://github.com/besu-eth/besu/pull/11874)
 - EVM v2 runs untraced execution, such as block import, in a faster loop of its own. [#11687](https://github.com/besu-eth/besu/pull/11687)
+- Backward sync is rewritten to download headers and block data from many peers at once and to import blocks continuously, replacing the one-request-at-a-time pipeline. It also serves post-merge full sync. Blocks at or below the finalized block whose block access list is available are imported without execution, by advancing the world state from the block access list (never in `--sync-mode=FULL`; hidden opt-out `--Xbackward-sync-bal-apply-enabled=false`). Backward sync data persisted by earlier versions is discarded on the first start. `TransitionCoordinator` now also stops the post-merge coordinator.
 
 ## 26.11.0
 

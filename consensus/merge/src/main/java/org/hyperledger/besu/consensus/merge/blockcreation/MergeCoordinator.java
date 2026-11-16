@@ -186,10 +186,14 @@ public class MergeCoordinator implements MergeMiningCoordinator, BadChainListene
   public void start() {}
 
   @Override
-  public void stop() {}
+  public void stop() {
+    backwardSyncContext.stop();
+  }
 
   @Override
-  public void awaitStop() throws InterruptedException {}
+  public void awaitStop() throws InterruptedException {
+    backwardSyncContext.awaitStop();
+  }
 
   @Override
   public boolean enable() {
@@ -643,9 +647,9 @@ public class MergeCoordinator implements MergeMiningCoordinator, BadChainListene
           .addArgument(maybeHeadHeader.get()::toLogString)
           .log();
     } else if (mergeContext.isInitialSyncDone()) {
-      backwardSyncContext.maybeUpdateTargetHeight(headHash);
       finalizedHashAfterBackwardSync.set(finalizedHash);
-      final CompletableFuture<Void> session = backwardSyncContext.syncBackwardsUntil(headHash);
+      final CompletableFuture<Void> session =
+          backwardSyncContext.syncBackwardsUntil(headHash, finalizedHash);
       // all calls during a session share its future, so one callback applies the latest finalized
       if (backwardSyncWithFinalizedUpdate.getAndSet(session) != session) {
         session.thenRun(
@@ -1096,8 +1100,7 @@ public class MergeCoordinator implements MergeMiningCoordinator, BadChainListene
     }
     // only a header we already know can be linked to its parent, anything else must be synced
     return backwardSyncContext
-        .getBackwardChain()
-        .getHeader(blockHash)
+        .getPendingHeader(blockHash)
         .flatMap(this::checkAndMarkBadDescendant)
         .isPresent();
   }
