@@ -35,6 +35,7 @@ import org.hyperledger.besu.evm.worldstate.WorldView;
 import org.hyperledger.besu.plugin.services.metrics.Counter;
 import org.hyperledger.besu.plugin.services.worldstate.MutableWorldState;
 
+import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -55,9 +56,13 @@ public class OptimisticConcurrentTransactionProcessor extends ParallelBlockTrans
   private static final Logger LOG =
       LoggerFactory.getLogger(OptimisticConcurrentTransactionProcessor.class);
 
+  private static final Duration RUNNING_WORKER_WAIT = Duration.ofSeconds(1);
+
   private final MainnetTransactionProcessor transactionProcessor;
 
   private final TransactionCollisionDetector transactionCollisionDetector;
+
+  private final Duration runningWorkerWait;
 
   /**
    * Constructs a PreloadConcurrentTransactionProcessor with a specified transaction processor. This
@@ -67,16 +72,24 @@ public class OptimisticConcurrentTransactionProcessor extends ParallelBlockTrans
    */
   public OptimisticConcurrentTransactionProcessor(
       final MainnetTransactionProcessor transactionProcessor) {
-    this.transactionProcessor = transactionProcessor;
-    this.transactionCollisionDetector = new TransactionCollisionDetector();
+    this(transactionProcessor, new TransactionCollisionDetector(), RUNNING_WORKER_WAIT);
   }
 
   @VisibleForTesting
   public OptimisticConcurrentTransactionProcessor(
       final MainnetTransactionProcessor transactionProcessor,
       final TransactionCollisionDetector transactionCollisionDetector) {
+    this(transactionProcessor, transactionCollisionDetector, RUNNING_WORKER_WAIT);
+  }
+
+  @VisibleForTesting
+  public OptimisticConcurrentTransactionProcessor(
+      final MainnetTransactionProcessor transactionProcessor,
+      final TransactionCollisionDetector transactionCollisionDetector,
+      final Duration runningWorkerWait) {
     this.transactionProcessor = transactionProcessor;
     this.transactionCollisionDetector = transactionCollisionDetector;
+    this.runningWorkerWait = runningWorkerWait;
   }
 
   @Override
@@ -191,6 +204,9 @@ public class OptimisticConcurrentTransactionProcessor extends ParallelBlockTrans
    * making the replay process faster. This approach ensures that the integrity of the world state
    * is maintained while optimizing the performance of transaction processing.
    *
+   * <p>A transaction a worker is still executing is awaited for up to one second before it is
+   * replayed.
+   *
    * @param worldState Mutable world state intended for applying transaction results.
    * @param miningBeneficiary Address of the beneficiary for mining rewards.
    * @param transaction Transaction for which the result is to be applied.
@@ -212,7 +228,7 @@ public class OptimisticConcurrentTransactionProcessor extends ParallelBlockTrans
       final Optional<Counter> conflictingButCachedTransactionCounter) {
 
     final CompletableFuture<ParallelizedTransactionContext> future =
-        removeFuture(transactionLocation);
+        takeFuture(transactionLocation, runningWorkerWait);
 
     if (future != null && future.state() == Future.State.FAILED) {
       LOG.debug(

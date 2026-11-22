@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hyperledger.besu.ethereum.trie.pathbased.bonsai.worldview.WorldStateConfig.createStatefulConfigWithTrie;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -62,11 +63,17 @@ import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 import org.hyperledger.besu.metrics.noop.NoOpMetricsSystem;
 
 import java.math.BigInteger;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.apache.tuweni.bytes.Bytes;
 import org.junit.jupiter.api.BeforeEach;
@@ -259,6 +266,137 @@ class OptimisticTransactionProcessorUnitTest {
           env.maybeParentHeader());
 
       verify(result).getLogsBloom();
+    }
+  }
+
+  @Nested
+  @DisplayName("Transactions a worker is running")
+  class RunningWorkers {
+    private final CountDownLatch began = new CountDownLatch(1);
+    private final CountDownLatch finish = new CountDownLatch(1);
+
+    /** Every execution signals that it began, then blocks until the test lets it finish. */
+    private void stubBlockingTransaction() {
+      when(transactionProcessor.processTransaction(
+              any(), any(), any(), any(), any(), any(), any(), any(), any()))
+          .thenAnswer(
+              invocation -> {
+                began.countDown();
+                finish.await(5, TimeUnit.SECONDS);
+                return TransactionProcessingResult.successful(
+                    Collections.emptyList(),
+                    0,
+                    0,
+                    Bytes.EMPTY,
+                    Optional.empty(),
+                    ValidationResult.valid());
+              });
+    }
+
+    private void runBlock(
+        final OptimisticConcurrentTransactionProcessor blockProcessor,
+        final List<Transaction> transactions,
+        final Executor workerExecutor) {
+      blockProcessor.runAsyncBlock(
+          env.protocolContext(),
+          env.blockHeader(),
+          transactions,
+          MINING_BENEFICIARY,
+          EMPTY_BLOCK_HASH_LOOKUP,
+          BLOB_GAS_PRICE,
+          workerExecutor,
+          Optional.empty(),
+          env.maybeParentHeader());
+    }
+
+    private Optional<TransactionProcessingResult> takeResult(
+        final OptimisticConcurrentTransactionProcessor blockProcessor,
+        final Transaction transaction,
+        final int index) {
+      return blockProcessor.getProcessingResult(
+          env.worldState(),
+          MINING_BENEFICIARY,
+          transaction,
+          index,
+          Optional.empty(),
+          Optional.empty());
+    }
+
+    @Test
+    @DisplayName("Awaits a transaction a worker is still executing")
+    void awaitsATransactionAWorkerIsStillExecuting() throws Exception {
+      final OptimisticConcurrentTransactionProcessor awaiting =
+          new OptimisticConcurrentTransactionProcessor(
+              transactionProcessor, collisionDetector, Duration.ofSeconds(5));
+      when(collisionDetector.hasCollision(any(), any(), any(), any())).thenReturn(false);
+      final Transaction transaction = mockTransaction();
+      stubBlockingTransaction();
+      final ExecutorService workerExecutor = Executors.newSingleThreadExecutor();
+      try {
+        runBlock(awaiting, List.of(transaction), workerExecutor);
+        assertTrue(began.await(5, TimeUnit.SECONDS));
+
+        final CompletableFuture<Optional<TransactionProcessingResult>> call =
+            CompletableFuture.supplyAsync(() -> takeResult(awaiting, transaction, 0));
+        assertThrows(TimeoutException.class, () -> call.get(200, TimeUnit.MILLISECONDS));
+
+        finish.countDown();
+
+        assertThat(call.get(5, TimeUnit.SECONDS)).isPresent();
+        verify(transactionProcessor, times(1))
+            .processTransaction(any(), any(), any(), any(), any(), any(), any(), any(), any());
+      } finally {
+        finish.countDown();
+        workerExecutor.shutdownNow();
+      }
+    }
+
+    @Test
+    @DisplayName("Cancels a transaction no worker has begun")
+    void cancelsATransactionNoWorkerHasBegun() throws Exception {
+      final Transaction first = mockTransaction();
+      // no worker runs it, so its detachedCopy is never read
+      final Transaction second = mock(Transaction.class);
+      stubBlockingTransaction();
+      final ExecutorService workerExecutor = Executors.newSingleThreadExecutor();
+      try {
+        runBlock(processor, List.of(first, second), workerExecutor);
+        assertTrue(began.await(5, TimeUnit.SECONDS));
+
+        assertThat(takeResult(processor, second, 1)).isEmpty();
+
+        finish.countDown();
+        workerExecutor.shutdown();
+        assertTrue(workerExecutor.awaitTermination(5, TimeUnit.SECONDS));
+        verify(transactionProcessor, times(1))
+            .processTransaction(any(), any(), any(), any(), any(), any(), any(), any(), any());
+      } finally {
+        finish.countDown();
+        workerExecutor.shutdownNow();
+      }
+    }
+
+    @Test
+    @DisplayName("Replays a transaction whose worker exceeds the wait")
+    void replaysATransactionWhoseWorkerExceedsTheWait() throws Exception {
+      final OptimisticConcurrentTransactionProcessor impatient =
+          new OptimisticConcurrentTransactionProcessor(
+              transactionProcessor, collisionDetector, Duration.ofMillis(100));
+      final Transaction transaction = mockTransaction();
+      stubBlockingTransaction();
+      final ExecutorService workerExecutor = Executors.newSingleThreadExecutor();
+      try {
+        runBlock(impatient, List.of(transaction), workerExecutor);
+        assertTrue(began.await(5, TimeUnit.SECONDS));
+
+        final CompletableFuture<Optional<TransactionProcessingResult>> call =
+            CompletableFuture.supplyAsync(() -> takeResult(impatient, transaction, 0));
+
+        assertThat(call.get(2, TimeUnit.SECONDS)).isEmpty();
+      } finally {
+        finish.countDown();
+        workerExecutor.shutdownNow();
+      }
     }
   }
 

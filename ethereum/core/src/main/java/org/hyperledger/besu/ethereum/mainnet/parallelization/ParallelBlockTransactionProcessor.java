@@ -27,18 +27,56 @@ import org.hyperledger.besu.evm.blockhash.BlockHashLookup;
 import org.hyperledger.besu.plugin.services.metrics.Counter;
 import org.hyperledger.besu.plugin.services.worldstate.MutableWorldState;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicIntegerArray;
 
 public abstract class ParallelBlockTransactionProcessor {
 
   protected CompletableFuture<ParallelizedTransactionContext>[] futures;
 
+  // 1 once a worker began the transaction at that index
+  private AtomicIntegerArray started;
+
   protected CompletableFuture<ParallelizedTransactionContext> removeFuture(final int txIndex) {
     final CompletableFuture<ParallelizedTransactionContext> future = futures[txIndex];
     futures[txIndex] = null;
+    return future;
+  }
+
+  /**
+   * Takes the future of a transaction for the block processor. A worker that already began the
+   * transaction is awaited for up to {@code maxWait}: what it has left to do is less than running
+   * the transaction again from the start. A transaction no worker has begun is cancelled, so no
+   * worker runs it. Returns null when no future exists for the index.
+   */
+  protected CompletableFuture<ParallelizedTransactionContext> takeFuture(
+      final int txIndex, final Duration maxWait) {
+    final CompletableFuture<ParallelizedTransactionContext> future = removeFuture(txIndex);
+    if (future == null || future.isDone()) {
+      return future;
+    }
+    if (started.get(txIndex) == 0) {
+      future.cancel(true);
+      return future;
+    }
+    try {
+      future.get(maxWait.toNanos(), TimeUnit.NANOSECONDS);
+    } catch (final InterruptedException e) {
+      Thread.currentThread().interrupt();
+      future.cancel(true);
+    } catch (final TimeoutException e) {
+      future.cancel(true);
+    } catch (final ExecutionException | CancellationException e) {
+      // the caller reads the outcome from the future's state
+    }
     return future;
   }
 
@@ -55,6 +93,8 @@ public abstract class ParallelBlockTransactionProcessor {
       final Optional<BlockHeader> maybeParentHeader) {
 
     futures = new CompletableFuture[transactions.size()];
+    final AtomicIntegerArray startedForBlock = new AtomicIntegerArray(transactions.size());
+    started = startedForBlock;
 
     for (int i = 0; i < transactions.size(); i++) {
       final int txIndex = i;
@@ -62,18 +102,20 @@ public abstract class ParallelBlockTransactionProcessor {
 
       futures[i] =
           CompletableFuture.supplyAsync(
-              () ->
-                  precomputeLogsBloom(
-                      runTransaction(
-                          protocolContext,
-                          blockHeader,
-                          txIndex,
-                          transaction,
-                          miningBeneficiary,
-                          blockHashLookup,
-                          blobGasPrice,
-                          blockAccessListBuilder,
-                          maybeParentHeader)),
+              () -> {
+                startedForBlock.set(txIndex, 1);
+                return precomputeLogsBloom(
+                    runTransaction(
+                        protocolContext,
+                        blockHeader,
+                        txIndex,
+                        transaction,
+                        miningBeneficiary,
+                        blockHashLookup,
+                        blobGasPrice,
+                        blockAccessListBuilder,
+                        maybeParentHeader));
+              },
               executor);
     }
   }
